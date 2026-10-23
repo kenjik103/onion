@@ -11,6 +11,8 @@
 #include "fetch.h"
 #include "grid.h"
 #include "request.h"
+#include "builders.h"
+#include "contract_write.h"
 #include "scene_spec.h"
 
 namespace {
@@ -126,9 +128,33 @@ void cmd_generate(Flags& flags) {
 
     // The scene spec is the only input to the builders; they never read the cached raw
     // pulls directly (SPEC.md 4.4).
-    write_scene_spec(r, g, cache, out);
+    const SceneSpec spec = write_scene_spec(r, g, cache, out);
 
-    throw std::runtime_error("generate: builders are not implemented until M4");
+    // Builders -> scene geometry contract (SPEC.md 6.5-6.8).
+    const Raster terrain = load_raster(spec.terrain_path);
+    Mesh mesh;
+    std::vector<ObjectRow> objects;
+
+    objects.push_back({0, CLASS_GROUND, "gedtm30"});
+    build_terrain(terrain, g, 0, mesh);
+    std::printf("  terrain      %zu vertices, %zu triangles\n", mesh.vertex_count(),
+                mesh.face_count());
+
+    const size_t ground_faces = mesh.face_count();
+    const uint32_t next_oid = build_buildings(spec.buildings, terrain, g, 1, mesh, objects);
+    std::printf("  buildings    %zu triangles, %u kept of %zu\n",
+                mesh.face_count() - ground_faces, next_oid - 1, spec.buildings.size());
+
+    const std::vector<Crown> crowns = build_crowns(spec.trees, g, next_oid, objects);
+    size_t voxels = 0;
+    for (const Crown& c : crowns) voxels += c.pad.size();
+    std::printf("  crowns       %zu crowns, %zu voxels\n", crowns.size(), voxels);
+
+    write_opaque_ply(mesh, out + "/opaque.ply");
+    write_crowns_bin(crowns, out + "/crowns.bin");
+    write_scene_geometry_json(g, objects, out + "/scene_geometry.json");
+    std::printf("  contract     opaque.ply, crowns.bin, scene_geometry.json (v%d)\n",
+                CONTRACT_FORMAT_VERSION);
 }
 
 }  // namespace

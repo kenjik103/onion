@@ -30,7 +30,7 @@ CPLJSONArray xy_ring(const OGRLinearRing* ring) {
 // building stays one object (SPEC.md 6.7) without losing geometry. Measured on the test
 // tiles: 794 of 795 Fargo buildings are single-part, one has two parts, and no building
 // has an interior ring.
-CPLJSONArray read_buildings(const std::string& path) {
+CPLJSONArray read_buildings(const std::string& path, std::vector<Footprint>& out_fp) {
     const GDALDatasetUniquePtr ds(GDALDataset::Open(path.c_str(), GDAL_OF_VECTOR));
     if (!ds) throw std::runtime_error("scene spec: cannot open " + path);
     OGRLayer* layer = ds->GetLayer(0);
@@ -59,9 +59,20 @@ CPLJSONArray read_buildings(const std::string& path) {
                 throw std::runtime_error("scene spec: building " + id +
                                          " has an interior ring; extruding footprints with "
                                          "holes is not implemented");
+            const OGRLinearRing* ring = p->getExteriorRing();
+            Footprint fp;
+            fp.id = id;
+            fp.height_m = BUILDING_HEIGHT_M;
+            const int nv = ring->getNumPoints() > 1 ? ring->getNumPoints() - 1 : 0;
+            for (int i = 0; i < nv; ++i) {
+                fp.xy.push_back(ring->getX(i));
+                fp.xy.push_back(ring->getY(i));
+            }
+            out_fp.push_back(std::move(fp));
+
             CPLJSONObject b;
             b.Add("id", id);
-            b.Add("polygon_utm", xy_ring(p->getExteriorRing()));
+            b.Add("polygon_utm", xy_ring(ring));
             b.Add("height_m", BUILDING_HEIGHT_M);
             out.Add(b);
         }
@@ -71,8 +82,8 @@ CPLJSONArray read_buildings(const std::string& path) {
 
 }  // namespace
 
-void write_scene_spec(const TileRequest& r, const Grid& g, const std::string& cache,
-                      const std::string& out_dir) {
+SceneSpec write_scene_spec(const TileRequest& r, const Grid& g, const std::string& cache,
+                           const std::string& out_dir) {
     const Raster chm = load_raster(cache_path(cache, "chm.tif"));
     const Raster landcover = load_raster(cache_path(cache, "landcover.tif"));
     const Raster terrain = load_raster(cache_path(cache, "terrain.tif"));
@@ -91,7 +102,11 @@ void write_scene_spec(const TileRequest& r, const Grid& g, const std::string& ca
         tree_arr.Add(o);
     }
 
-    const CPLJSONArray buildings = read_buildings(cache_path(cache, "buildings.fgb"));
+    SceneSpec spec;
+    spec.trees = trees;
+    spec.terrain_path = cache_path(cache, "terrain.tif");
+    const CPLJSONArray buildings =
+        read_buildings(cache_path(cache, "buildings.fgb"), spec.buildings);
     std::printf("  buildings    %d footprint parts\n", buildings.Size());
 
     CPLJSONDocument doc;
@@ -134,4 +149,5 @@ void write_scene_spec(const TileRequest& r, const Grid& g, const std::string& ca
     const std::string path = out_dir + "/scene_spec.json";
     if (!doc.Save(path)) throw std::runtime_error("scene spec: cannot write " + path);
     std::printf("  scene spec   %s\n", path.c_str());
+    return spec;
 }
