@@ -13,18 +13,22 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 
 find_package(GDAL REQUIRED)
 
-# DuckDB serves the Overture buildings query from M2 on (SPEC.md 8.3), and only
-# inside `fetch`. Nothing in M0/M1 uses it, so it is located but not linked:
-# asserting it here makes a missing dependency visible now rather than at M2.
+# DuckDB serves the Overture buildings query (SPEC.md 8.3), and only inside `fetch`.
 find_library(DUCKDB_LIBRARY NAMES duckdb REQUIRED)
 message(STATUS "DuckDB library: ${DUCKDB_LIBRARY}")
 
 add_library(onion_core STATIC
   src/request.cpp
   src/grid.cpp
+  src/sha256.cpp
+  src/cache.cpp
+  src/sources.cpp
+  src/fetch_raster.cpp
+  src/fetch.cpp
+  src/buildings.cpp
 )
 target_include_directories(onion_core PUBLIC src)
-target_link_libraries(onion_core PUBLIC GDAL::GDAL)
+target_link_libraries(onion_core PUBLIC GDAL::GDAL ${DUCKDB_LIBRARY})
 
 add_executable(onion src/main.cpp)
 target_link_libraries(onion PRIVATE onion_core)
@@ -33,3 +37,7 @@ enable_testing()
 add_executable(test_grid tests/test_grid.cpp)
 target_link_libraries(test_grid PRIVATE onion_core)
 add_test(NAME grid COMMAND test_grid)
+
+add_executable(test_sources tests/test_sources.cpp)
+target_link_libraries(test_sources PRIVATE onion_core)
+add_test(NAME sources COMMAND test_sources)

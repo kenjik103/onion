@@ -6,7 +6,9 @@
 #include <string>
 
 #include <cpl_conv.h>
+#include <gdal_priv.h>
 
+#include "fetch.h"
 #include "grid.h"
 #include "request.h"
 
@@ -107,8 +109,7 @@ void cmd_fetch(Flags& flags) {
     validate_request(r);
     print_grid(r, make_grid(r));
     std::printf("cache      %s\n", cache.c_str());
-
-    throw std::runtime_error("fetch: not implemented until M2");
+    run_fetch(r, cache);
 }
 
 void cmd_generate(Flags& flags) {
@@ -127,8 +128,9 @@ void cmd_generate(Flags& flags) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    // Process-global, so it is set once here rather than inside a fetcher (gotcha 4).
+    // Process-global, so both are set once here rather than inside a fetcher (gotcha 4).
     CPLSetConfigOption("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR");
+    GDALAllRegister();
 
     try {
         if (argc < 2) usage_error("no subcommand given");
