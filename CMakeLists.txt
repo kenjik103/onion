@@ -38,6 +38,28 @@ target_link_libraries(onion_core PUBLIC GDAL::GDAL ${DUCKDB_LIBRARY})
 add_executable(onion src/main.cpp)
 target_link_libraries(onion PRIVATE onion_core)
 
+# --- Viewer (SPEC.md 6.11) -------------------------------------------------------
+# Polyscope is vendored, not packaged for this distribution. It is cloned out of band
+# rather than by FetchContent: FetchContent cannot make submodule clones shallow, and
+# Polyscope pulls in imgui, glfw and glm, whose full histories took the better part of
+# an hour here against under ten minutes shallow.
+set(POLYSCOPE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/polyscope")
+if(NOT EXISTS "${POLYSCOPE_DIR}/CMakeLists.txt")
+  message(FATAL_ERROR
+    "Polyscope is missing. Clone it (pinned tag, shallow including submodules):\n"
+    "  git clone --depth 1 --branch v2.6.1 --recurse-submodules --shallow-submodules \\\n"
+    "      https://github.com/nmwsharp/polyscope.git third_party/polyscope")
+endif()
+add_subdirectory("${POLYSCOPE_DIR}" EXCLUDE_FROM_ALL)
+
+add_executable(onion_viewer src/viewer.cpp src/contract_read.cpp)
+target_include_directories(onion_viewer PRIVATE src)
+target_link_libraries(onion_viewer PRIVATE polyscope GDAL::GDAL)
+# Polyscope's headers are noisy under -Wall -Wextra; treat them as system headers so
+# warnings from our own code stay visible.
+get_target_property(_ps_inc polyscope INTERFACE_INCLUDE_DIRECTORIES)
+target_include_directories(onion_viewer SYSTEM PRIVATE ${_ps_inc})
+
 enable_testing()
 add_executable(test_grid tests/test_grid.cpp)
 target_link_libraries(test_grid PRIVATE onion_core)
