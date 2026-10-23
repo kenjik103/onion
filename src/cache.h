@@ -18,7 +18,9 @@ struct Provenance {
 
 std::string cache_path(const std::string& cache, const std::string& name);
 bool file_exists(const std::string& path);
-void ensure_cache_dir(const std::string& cache);
+// Creates the directory if it is absent. Used for both the cache and the output
+// directory, so `fetch` and `generate` behave the same way.
+void ensure_dir(const std::string& path);
 
 // Copies a remote file into the cache if it is not already there. Used for the
 // canopy tile indexes, which are plain GeoJSON with no spatial index and so must be

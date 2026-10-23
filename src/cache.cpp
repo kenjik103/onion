@@ -17,15 +17,15 @@ bool file_exists(const std::string& path) {
     return VSIStatL(path.c_str(), &st) == 0;
 }
 
-void ensure_cache_dir(const std::string& cache) {
+void ensure_dir(const std::string& path) {
     VSIStatBufL st;
-    if (VSIStatL(cache.c_str(), &st) == 0) {
+    if (VSIStatL(path.c_str(), &st) == 0) {
         if (!VSI_ISDIR(st.st_mode))
-            throw std::runtime_error("cache: not a directory: " + cache);
+            throw std::runtime_error("not a directory: " + path);
         return;
     }
-    if (VSIMkdir(cache.c_str(), 0755) != 0)
-        throw std::runtime_error("cache: cannot create directory: " + cache);
+    if (VSIMkdir(path.c_str(), 0755) != 0)
+        throw std::runtime_error("cannot create directory: " + path);
 }
 
 std::string partial_path(const std::string& final_path) {

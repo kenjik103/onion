@@ -14,6 +14,7 @@
 #include "grid.h"
 #include "request.h"
 #include "builders.h"
+#include "cache.h"
 #include "contract_read.h"
 #include "contract_write.h"
 #include "las.h"
@@ -131,6 +132,11 @@ void cmd_generate(Flags& flags) {
     const Grid g = make_grid(r);
     print_grid(r, g);
     std::printf("cache      %s\nout        %s\n", cache.c_str(), out.c_str());
+
+    // Create the output directory, exactly as `fetch` creates the cache. Without this
+    // the two subcommands behave differently and the documented sequence fails on a
+    // fresh checkout.
+    ensure_dir(out);
 
     // The scene spec is the only input to the builders; they never read the cached raw
     // pulls directly (SPEC.md 4.4).

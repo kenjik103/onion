@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <cstdio>
+
 #include "cache.h"
 #include "sources.h"
 
@@ -32,6 +34,19 @@ void test_worldcover_names() {
     eq(worldcover_tile_name(45.0, -99.0), "N45W099", "exactly on a tile corner");
 }
 
+// Regression: `fetch` created its cache directory but `generate` did not create its
+// output directory, so the documented sequence failed on a fresh checkout. Both now go
+// through ensure_dir.
+void test_ensure_dir() {
+    const std::string base = "/tmp/onion_ensure_dir_test";
+    std::remove(base.c_str());
+    ensure_dir(base);
+    check(file_exists(base), "ensure_dir creates a missing directory");
+    ensure_dir(base);  // must be idempotent, since fetch re-runs against a warm cache
+    check(file_exists(base), "ensure_dir on an existing directory is a no-op");
+    std::remove(base.c_str());
+}
+
 void test_partial_path() {
     eq(partial_path("/a/b/terrain.tif"), "/a/b/terrain.partial.tif", "raster temp name");
     eq(partial_path("/a/b/buildings.fgb"), "/a/b/buildings.partial.fgb", "vector temp name");
@@ -50,6 +65,7 @@ void test_partial_path() {
 int main() {
     try {
         test_worldcover_names();
+        test_ensure_dir();
         test_partial_path();
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());

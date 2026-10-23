@@ -1,0 +1,30 @@
+{
+  "terrain":{
+    "url":"https:\/\/s3.opengeohub.org\/global\/dtm\/v1.2\/gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif",
+    "version":"GEDTM30 v1.2",
+    "vintage":"2006-01-01\/2015-12-31 (encoded in the file name)",
+    "file":"terrain.tif",
+    "sha256":"6eb52110b978b884ba80499e0cb7544cb9fa55bec73d6d299c7c8b7101434a9b"
+  },
+  "landcover":{
+    "url":"https:\/\/esa-worldcover.s3.eu-central-1.amazonaws.com\/v200\/2021\/map\/ESA_WorldCover_10m_2021_v200_N36W087_Map.tif",
+    "version":"ESA WorldCover v200 (2021), tile N36W087",
+    "vintage":"2021-01-01\/2021-12-31",
+    "file":"landcover.tif",
+    "sha256":"138868eb692b3468ae070a8d47688e8875d9f81dbf10dacee27f28836f107dad"
+  },
+  "chm":{
+    "url":"https:\/\/dataforgood-fb-data.s3.us-east-1.amazonaws.com\/forests\/v2\/global\/dinov3_global_chm_v2_ml3\/chm\/0320003030.tif",
+    "version":"Meta\/WRI canopy height v2, tile 0320003030",
+    "vintage":"varies by location; not published per tile for v2",
+    "file":"chm.tif",
+    "sha256":"4cabcc0f962a544d11193f91ec5c786e803147ac810b65e26fff6561ebdecb0c"
+  },
+  "buildings":{
+    "url":"s3:\/\/overturemaps-us-west-2\/release\/2026-10-21.0\/theme=buildings\/type=building\/*",
+    "version":"Overture release 2026-10-21.0",
+    "vintage":"2026-10-21.0",
+    "file":"buildings.fgb",
+    "sha256":"8c493b4f57fe813b68b9c858613ad13d8bc9c31061aae1fb5b77f91f00541be0"
+  }
+}
