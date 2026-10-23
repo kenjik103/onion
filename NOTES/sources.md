@@ -176,6 +176,30 @@ would read 26–29 m.
 **v1 and v2 disagree on this tile** (max 29 m vs 20 m, mean 0.74 vs 1.01). That
 disagreement is G3's subject, not something to reconcile here.
 
+### Gotcha 4 is worth far more than it looks: measured
+
+SPEC.md 8.4 lists `GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR` as a tidy-up. It is not --
+without it, remote reads from the GEDTM30 bucket are unusable. Reading three points:
+
+```
+$ gdallocationinfo -wgs84 -valonly /vsicurl/<GEDTM30 URL> < 3_points.txt
+  ... killed at 300 s, no output
+
+$ GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR gdallocationinfo ... < 3_points.txt
+  193
+  152.399993896484
+  138.800003051758
+  real 0m11.007s
+```
+
+**More than 300 s versus 11 s.** Without the option GDAL probes for sidecar files
+(`.aux.xml`, `.ovr`, and friends) over HTTP on every open, and that bucket makes each
+probe expensive. `onion` sets this once at startup, which is why `fetch` pulls all four
+rasters in about 23 s while the bare `gdalwarp` CLI took 5m34s for one of them.
+
+**Any gate tooling driving the GDAL CLI must export this variable too.** It is a
+process-wide setting, so it is not inherited from the library call in `main()`.
+
 ### Overture query cost
 
 The buildings partition holds **512 part files** with no geographic partitioning, so
