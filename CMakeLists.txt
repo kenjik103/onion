@@ -26,6 +26,9 @@ add_library(onion_core STATIC
   src/fetch_raster.cpp
   src/fetch.cpp
   src/buildings.cpp
+  src/raster.cpp
+  src/trees.cpp
+  src/scene_spec.cpp
 )
 target_include_directories(onion_core PUBLIC src)
 target_link_libraries(onion_core PUBLIC GDAL::GDAL ${DUCKDB_LIBRARY})

@@ -11,6 +11,7 @@
 #include "fetch.h"
 #include "grid.h"
 #include "request.h"
+#include "scene_spec.h"
 
 namespace {
 
@@ -119,10 +120,15 @@ void cmd_generate(Flags& flags) {
     reject_unknown(flags);
 
     validate_request(r);
-    print_grid(r, make_grid(r));
+    const Grid g = make_grid(r);
+    print_grid(r, g);
     std::printf("cache      %s\nout        %s\n", cache.c_str(), out.c_str());
 
-    throw std::runtime_error("generate: not implemented until M4");
+    // The scene spec is the only input to the builders; they never read the cached raw
+    // pulls directly (SPEC.md 4.4).
+    write_scene_spec(r, g, cache, out);
+
+    throw std::runtime_error("generate: builders are not implemented until M4");
 }
 
 }  // namespace

@@ -342,7 +342,7 @@ if (res->HasError()) throw std::runtime_error(res->GetError());
 | **G1** | Alignment | PNG overlays on one extent (DTM hillshade, land cover, canopy height, building outlines) agree on where things are |
 | **G2** | Terrain source | On a forested tile (agent proposes one with high WorldCover tree fraction; user confirms), GLO-30 minus GEDTM30 looks like canopy height and roughly matches the canopy map |
 | **G3** | Canopy version | v1 vs. v2 on the same tile, compared against the WorldCover tree mask; also report canopy heights inside Overture footprints (the rooftop contamination the mask removes); the user picks a version. **PASSED 2026-10-23: v2 chosen.** Run on two tiles — Hoosier NF for the version comparison, Fargo for rooftop contamination, which needs buildings. v2 reads ~6 m taller in closed forest; contamination did not discriminate (0.317% vs 0.315% surviving the mask) |
-| M3 | Scene spec + tree detection | Detected crowns overlaid on the canopy map (PNG), with counts and height distribution; the agent proposes the detection method with evidence, the user approves |
+| M3 | Scene spec + tree detection | Detected crowns overlaid on the canopy map (PNG), with counts and height distribution; the agent proposes the detection method with evidence, the user approves. **DONE 2026-10-23:** method approved (masked local maxima, height-scaled window `k`=0.100, tied-plateau grouping, watershed crown sizing); 10,600 trees at 84.8/ha on Hoosier NF, 1,589 at 12.7/ha on Fargo. See `NOTES/m3/README.md` |
 | M4 | Builders → scene geometry contract | Contract files for the test tile plus `FORMAT.md`; a separate reader written only from `FORMAT.md` loads every file; terrain covers the padded tile with no gaps; every primitive has an object ID and class; no local coordinate exceeds the padded tile size |
 | V1 | Viewer: scene geometry | First, an empty Polyscope window opens on the user's workstation and `--screenshot` writes a PNG headless; then terrain, buildings, and crowns render with toggles; screenshots of the test tile match the G1 overlays; Run on the test tile produces the same outputs as the CLI |
 | M5 | Scanner (opaque) + LAS output | Synthetic flat plane: point count equals cell count exactly, all class 2, all z on the plane. Synthetic box building: roof points at roof height, none on walls. Every point within 1 mm of a contract surface. LAS opens in an independent reader the user approves (e.g. `pdal info`). Two runs give identical hashes. Measured density on open ground is exactly 1/0.14² pts/m² |
@@ -363,8 +363,8 @@ Fix root causes, not symptoms. Make surgical changes. Never stack speculative fi
 - ~~**Canopy height map version** (G3)~~ — **resolved 2026-10-23: v2.**
 - **Tree archetype:** PAD, G (default 0.5, the random leaf orientation value), crown-base ratio, envelope shape, voxel size (default 0.25 m, as in prior work). Settled at G4.
 - **Building height constant**
-- **Tree detection method** (the agent proposes at M3)
-- **Scene spec on-disk format**
+- ~~**Tree detection method** (the agent proposes at M3)~~ — **resolved 2026-10-23.** Masked local maxima with a window of `k`=0.100 x height, tied plateaus grouped to one tree, crown size from a marker-controlled watershed. Evidence in `NOTES/m3/README.md`.
+- ~~**Scene spec on-disk format**~~ — **resolved 2026-10-23: a single JSON file** (`scene_spec.json`), written with GDAL's CPLJSON so no dependency is added. Rasters stay as paths into the cache, as 6.4 specifies.
 - ~~**Whether to drop DuckDB** in favor of GDAL's Parquet driver (based on the M0 report)~~ — **resolved 2026-10-23: keep DuckDB.** This GDAL build cannot load its Parquet plugin (Arrow 25 vs 26 ABI mismatch), and getting it would mean a custom GDAL build. DuckDB runs only inside `fetch`, so the offline `generate` path is unaffected either way.
 
 ## 12. Post-MVP, in rough order
