@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""M5 check: is every LAS point within 1 mm of a contract surface?
+"""M5/G4 check: does every LAS point sit where the contract says it should?
+
+Opaque points (class 2 ground, 6 building) must lie within 1 mm of the highest opaque
+surface under them. Vegetation points (class 5) must NOT: they are interception points
+inside a crown, so they are checked instead for lying above the opaque surface and
+inside a voxel that actually carries plant area density.
 
 Independent of the generator. The LAS is parsed from the format spec and the mesh from
 FORMAT.md; for each sampled point this finds every triangle whose xy box contains it,
-computes the triangle's z there, and compares the highest against the point's z. That is
-the scanner's defining property -- highest opaque surface under the sample -- rechecked
-without reusing the scanner's code.
+computes the triangle's z there, and compares the highest against the point's z, without reusing
+the scanner's code.
 
 usage: m5_verify.py <contract-dir> [n_samples]
 """
@@ -60,6 +64,30 @@ def read_ply(path):
     return verts, idx, cls
 
 
+def crown_hits(path, pts_local, voxel):
+    """For each given local xyz, whether some crown has PAD > 0 in its voxel."""
+    vx = np.floor(pts_local[:, 0] / voxel).astype(np.int64)
+    vy = np.floor(pts_local[:, 1] / voxel).astype(np.int64)
+    vz = np.floor(pts_local[:, 2] / voxel).astype(np.int64)
+    found = np.zeros(len(pts_local), bool)
+    with open(path, "rb") as f:
+        assert f.read(8) == b"ONIONCRW"
+        _, count = struct.unpack("<II", f.read(8))
+        for _ in range(count):
+            oid, ix, iy, iz, nx, ny, nz = struct.unpack("<IiiiIII", f.read(28))
+            n = nx * ny * nz
+            inside = (~found & (vx >= ix) & (vx < ix + nx) & (vy >= iy) &
+                      (vy < iy + ny) & (vz >= iz) & (vz < iz + nz))
+            if not inside.any():
+                f.seek(4 * n, 1)
+                continue
+            pad = np.frombuffer(f.read(4 * n), np.float32).reshape(nz, ny, nx)
+            for k in np.nonzero(inside)[0]:
+                if pad[vz[k] - iz, vy[k] - iy, vx[k] - ix] > 0:
+                    found[k] = True
+    return found
+
+
 def main():
     d = sys.argv[1]
     n = int(sys.argv[2]) if len(sys.argv) > 2 else 300
@@ -84,6 +112,8 @@ def main():
     bad = 0
     nohit = 0
     cls_mismatch = 0
+    veg_below = 0
+    veg_idx = []
     for k in range(len(pts)):
         px, py, pz = pts[k][0] - ox, pts[k][1] - oy, pts[k][2]
         m = (tminx <= px) & (tmaxx >= px) & (tminy <= py) & (tmaxy >= py) & (area != 0)
@@ -100,6 +130,13 @@ def main():
             continue
         z = w1[inside] * aa[inside][:, 2] + w2[inside] * bb[inside][:, 2] + w0[inside] * cc[inside][:, 2]
         hi = z.max()
+        if cls[k] == 5:
+            # An interception inside a crown: it must sit above the opaque surface,
+            # not on it. 1 mm of slack covers the LAS quantisation.
+            veg_idx.append(k)
+            if pz < hi - 0.001:
+                veg_below += 1
+            continue
         err = abs(hi - pz)
         worst = max(worst, err)
         if err > 0.001:
@@ -107,14 +144,25 @@ def main():
         if fcls[m][inside][np.argmax(z)] != cls[k]:
             cls_mismatch += 1
 
-    print(f"\n  sampled {len(pts)} points")
-    print(f"  points with no containing triangle : {nohit}")
-    print(f"  points further than 1 mm from the highest surface : {bad}")
-    print(f"  worst vertical error : {worst*1000:.4f} mm")
-    print(f"  class disagreements with the highest triangle : {cls_mismatch}")
-    ok = bad == 0 and nohit == 0
-    print("\n" + ("PASS: every sampled point lies on a contract surface within 1 mm"
-                  if ok else "FAIL"))
+    n_op = len(pts) - len(veg_idx)
+    print(f"\n  sampled {len(pts)} points: {n_op} opaque (class 2/6), "
+          f"{len(veg_idx)} vegetation (class 5)")
+    print(f"  opaque: no containing triangle      : {nohit}")
+    print(f"  opaque: further than 1 mm from surface : {bad}")
+    print(f"  opaque: worst vertical error        : {worst*1000:.4f} mm")
+    print(f"  opaque: class disagreements         : {cls_mismatch}")
+
+    veg_bad_voxel = 0
+    if veg_idx:
+        local = np.column_stack([pts[veg_idx, 0] - ox, pts[veg_idx, 1] - oy, pts[veg_idx, 2]])
+        voxel = meta["crown_archetype"]["voxel_size_m"]
+        hit = crown_hits(f"{d}/crowns.bin", local, voxel)
+        veg_bad_voxel = int((~hit).sum())
+        print(f"  vegetation: below the opaque surface : {veg_below}")
+        print(f"  vegetation: in a voxel with no PAD   : {veg_bad_voxel}")
+    ok = bad == 0 and nohit == 0 and veg_below == 0 and veg_bad_voxel == 0
+    print("\n" + ("PASS: opaque points lie on a contract surface within 1 mm; "
+                  "vegetation points lie inside crown voxels above it" if ok else "FAIL"))
     return 0 if ok else 1
 
 
