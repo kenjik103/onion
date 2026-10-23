@@ -36,6 +36,15 @@ struct CrownPoints {
     int stride = 1;
 };
 
+// A crown block exactly as crowns.bin stores it (FORMAT.md section 4).
+struct CrownBlock {
+    uint32_t object_id = 0;
+    int32_t ix = 0, iy = 0, iz = 0;
+    uint32_t nx = 0, ny = 0, nz = 0;
+    std::vector<float> pad;  // nx*ny*nz, x fastest then y then z
+};
+
 ContractMeta read_scene_geometry(const std::string& path);
+std::vector<CrownBlock> read_crowns(const std::string& path);
 ContractMesh read_opaque_ply(const std::string& path);
 CrownPoints read_crown_points(const std::string& path, double voxel_size, size_t max_points);

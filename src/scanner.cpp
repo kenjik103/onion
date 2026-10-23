@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 OpaqueHits scan_opaque(const ContractMesh& mesh, const std::vector<uint32_t>& object_id,
                        const ScanGrid& g) {
@@ -68,4 +69,106 @@ OpaqueHits scan_opaque(const ContractMesh& mesh, const std::vector<uint32_t>& ob
         }
     }
     return out;
+}
+
+namespace {
+
+// Summed PAD and the smallest contributing object id, for one voxel of one column.
+struct VoxelSample {
+    double pad = 0.0;
+    uint32_t object_id = 0;
+    bool any = false;
+};
+
+}  // namespace
+
+void scan_vegetation(const std::vector<CrownBlock>& crowns, double voxel_size, double g_coef,
+                     const ScanGrid& grid, OpaqueHits& hits) {
+    if (crowns.empty() || !(voxel_size > 0.0) || !(g_coef > 0.0)) return;
+
+    // Index crowns by the sample cells their xy block covers, so a sample only consults
+    // the handful of crowns actually above it rather than all of them.
+    int32_t kz_lo = INT32_MAX, kz_hi = INT32_MIN;
+    for (const CrownBlock& c : crowns) {
+        kz_lo = std::min(kz_lo, c.iz);
+        kz_hi = std::max(kz_hi, c.iz + static_cast<int32_t>(c.nz) - 1);
+    }
+
+    std::vector<std::vector<uint32_t>> index(static_cast<size_t>(grid.nx) * grid.ny);
+    for (uint32_t ci = 0; ci < crowns.size(); ++ci) {
+        const CrownBlock& c = crowns[ci];
+        const double x0 = c.ix * voxel_size, x1 = (c.ix + c.nx) * voxel_size;
+        const double y0 = c.iy * voxel_size, y1 = (c.iy + c.ny) * voxel_size;
+        const int i0 = std::max(0, static_cast<int>(std::floor((x0 - grid.x0) / grid.spacing)) - 1);
+        const int i1 = std::min(grid.nx - 1,
+                                static_cast<int>(std::floor((x1 - grid.x0) / grid.spacing)) + 1);
+        const int j0 = std::max(0, static_cast<int>(std::floor((y0 - grid.y0) / grid.spacing)) - 1);
+        const int j1 = std::min(grid.ny - 1,
+                                static_cast<int>(std::floor((y1 - grid.y0) / grid.spacing)) + 1);
+        for (int j = j0; j <= j1; ++j)
+            for (int i = i0; i <= i1; ++i)
+                index[static_cast<size_t>(j) * grid.nx + i].push_back(ci);
+    }
+
+    std::vector<VoxelSample> column;
+    for (int j = 0; j < grid.ny; ++j) {
+        for (int i = 0; i < grid.nx; ++i) {
+            const size_t s = static_cast<size_t>(j) * grid.nx + i;
+            const std::vector<uint32_t>& cand = index[s];
+            if (cand.empty()) continue;
+
+            double sx, sy;
+            sample_xy(grid, i, j, sx, sy);
+            const int32_t vx = static_cast<int32_t>(std::floor(sx / voxel_size));
+            const int32_t vy = static_cast<int32_t>(std::floor(sy / voxel_size));
+
+            // Accumulate the column once, so overlapping crowns sum exactly.
+            const int32_t nz = kz_hi - kz_lo + 1;
+            column.assign(static_cast<size_t>(nz), VoxelSample{});
+            bool any = false;
+            for (const uint32_t ci : cand) {
+                const CrownBlock& c = crowns[ci];
+                const int32_t lx = vx - c.ix;
+                const int32_t ly = vy - c.iy;
+                if (lx < 0 || ly < 0 || lx >= static_cast<int32_t>(c.nx) ||
+                    ly >= static_cast<int32_t>(c.ny))
+                    continue;
+                for (uint32_t k = 0; k < c.nz; ++k) {
+                    const float p = c.pad[(static_cast<size_t>(k) * c.ny + ly) * c.nx + lx];
+                    if (p <= 0.0f) continue;
+                    VoxelSample& v = column[static_cast<size_t>(c.iz + k - kz_lo)];
+                    v.pad += p;
+                    v.object_id = v.any ? std::min(v.object_id, c.object_id) : c.object_id;
+                    v.any = true;
+                    any = true;
+                }
+            }
+            if (!any) continue;
+
+            // Walk down from the top of the lattice to the opaque surface.
+            const double opaque_z = hits.z[s] == SCAN_MISS_Z ? -1e30 : hits.z[s];
+            uint64_t step = 0;
+            for (int32_t k = nz - 1; k >= 0; --k, ++step) {
+                const VoxelSample& v = column[static_cast<size_t>(k)];
+                const double top = (kz_lo + k + 1) * voxel_size;
+                const double bot = top - voxel_size;
+                if (bot < opaque_z) break;
+                if (!v.any || v.pad <= 0.0) continue;
+
+                const double rate = g_coef * v.pad;
+                const double p_hit = 1.0 - std::exp(-rate * voxel_size);
+                // Draws 0 and 1 are the sample's xy offset, so vegetation starts at 2.
+                if (scan_rand01(grid.seed, s, 2 + 2 * step) >= p_hit) continue;
+
+                // Depth inside the voxel, from the truncated exponential with this rate.
+                const double u = scan_rand01(grid.seed, s, 3 + 2 * step);
+                const double d = -std::log(1.0 - u * p_hit) / rate;
+                hits.z[s] = static_cast<float>(top - d);
+                hits.object_id[s] = v.object_id;
+                hits.cls[s] = 5;
+                if (opaque_z == -1e30) ++hits.hit_count;
+                break;
+            }
+        }
+    }
 }

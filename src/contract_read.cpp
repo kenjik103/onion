@@ -89,6 +89,35 @@ ContractMesh read_opaque_ply(const std::string& path) {
     return m;
 }
 
+std::vector<CrownBlock> read_crowns(const std::string& path) {
+    const FilePtr f = open_r(path);
+    char magic[8];
+    get(f.get(), magic, 8, path);
+    if (std::memcmp(magic, "ONIONCRW", 8) != 0)
+        throw std::runtime_error("contract: bad magic in " + path);
+    uint32_t version = 0, count = 0;
+    get(f.get(), &version, 4, path);
+    get(f.get(), &count, 4, path);
+    if (version != 1)
+        throw std::runtime_error("contract: unsupported crowns.bin version " +
+                                 std::to_string(version));
+
+    std::vector<CrownBlock> out(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        CrownBlock& c = out[i];
+        get(f.get(), &c.object_id, 4, path);
+        int32_t org[3];
+        uint32_t dim[3];
+        get(f.get(), org, 12, path);
+        get(f.get(), dim, 12, path);
+        c.ix = org[0]; c.iy = org[1]; c.iz = org[2];
+        c.nx = dim[0]; c.ny = dim[1]; c.nz = dim[2];
+        c.pad.resize(static_cast<size_t>(c.nx) * c.ny * c.nz);
+        get(f.get(), c.pad.data(), c.pad.size() * sizeof(float), path);
+    }
+    return out;
+}
+
 CrownPoints read_crown_points(const std::string& path, double voxel_size, size_t max_points) {
     const FilePtr f = open_r(path);
 

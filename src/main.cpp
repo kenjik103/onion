@@ -176,9 +176,19 @@ void cmd_generate(Flags& flags) {
     sg.nx = static_cast<int>(std::floor(r.extent_m / SCAN_SPACING_M));
     sg.ny = sg.nx;
     sg.seed = r.seed;
-    const OpaqueHits hits = scan_opaque(scene, scene.object_id, sg);
+    OpaqueHits hits = scan_opaque(scene, scene.object_id, sg);
     std::printf("  scan         %d x %d samples, %zu opaque hits\n", sg.nx, sg.ny,
                 hits.hit_count);
+
+    // Vegetation, read back from the contract like the mesh (SPEC.md 4.4).
+    const ContractMeta cmeta = read_scene_geometry(out + "/scene_geometry.json");
+    const std::vector<CrownBlock> crown_blocks = read_crowns(out + "/crowns.bin");
+    scan_vegetation(crown_blocks, cmeta.voxel_size_m, cmeta.crown_g, sg, hits);
+    size_t veg = 0;
+    for (const uint8_t c : hits.cls)
+        if (c == 5) ++veg;
+    std::printf("  vegetation   %zu of %zu points intercepted by crowns (%.1f%%)\n", veg,
+                hits.hit_count, 100.0 * veg / std::max<size_t>(hits.hit_count, 1));
 
     double bounds[6] = {1e308, -1e308, 1e308, -1e308, 1e308, -1e308};
     for (int j = 0; j < sg.ny; ++j)

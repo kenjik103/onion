@@ -94,3 +94,8 @@ add_executable(test_scanner tests/test_scanner.cpp)
 target_link_libraries(test_scanner PRIVATE onion_core)
 target_compile_options(test_scanner PRIVATE ${ONION_WARNINGS})
 add_test(NAME scanner COMMAND test_scanner)
+
+add_executable(test_crown tests/test_crown.cpp)
+target_link_libraries(test_crown PRIVATE onion_core)
+target_compile_options(test_crown PRIVATE ${ONION_WARNINGS})
+add_test(NAME crown COMMAND test_crown)

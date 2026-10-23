@@ -166,6 +166,10 @@ std::vector<Tree> detect_trees(const Raster& chm, const Raster& landcover,
         tr.ground_z = sample_bilinear(terrain, tr.x, tr.y);
         tr.crown_radius_m =
             std::max(std::sqrt(std::max(area[t + 1], 1) * px * px / M_PI), px);
+        // Cap runaway watershed segments (G4). The tree is kept; only its crown extent
+        // is bounded, so no canopy hole is opened.
+        tr.crown_radius_m =
+            std::min(tr.crown_radius_m, CROWN_RADIUS_MAX_RATIO * tr.height_m);
         trees.push_back(tr);
     }
     return trees;

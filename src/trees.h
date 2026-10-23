@@ -22,6 +22,12 @@ inline constexpr int WINDOW_R_MIN_PX = 1;
 inline constexpr int WINDOW_R_MAX_PX = 12;
 inline constexpr int WORLDCOVER_TREE = 10;
 
+// Ceiling on crown radius, as a fraction of tree height. Watershed segmentation
+// occasionally hands one seed a whole canopy patch: measured on Hoosier NF, 6.6% of
+// crowns exceeded 10 m radius and the largest reached 23.15 m, which voxelised would
+// spread plant area density over 1683 m2 from a single tree. Settled at G4.
+inline constexpr double CROWN_RADIUS_MAX_RATIO = 0.35;
+
 // Local maxima with a height-scaled window, tied plateaus reduced to one tree each,
 // crown size from a marker-controlled watershed over the canopy.
 // @p padded is the scene extent. Each cached raster is snapped outward to a whole

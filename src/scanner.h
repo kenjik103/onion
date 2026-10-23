@@ -55,3 +55,15 @@ inline constexpr float SCAN_MISS_Z = -1e30f;
 // object id (SPEC.md 6.9, gotcha 10).
 OpaqueHits scan_opaque(const ContractMesh& mesh, const std::vector<uint32_t>& object_id,
                        const ScanGrid& g);
+
+// SPEC.md 6.9, vegetation. For each sample, walks the voxel column from the top down to
+// the opaque hit. A voxel with PAD > 0 intercepts the ray with probability
+// 1 - exp(-G * PAD * voxel_size); on interception the hit depth inside the voxel is
+// drawn from the truncated exponential with rate G * PAD. The point then gets class 5
+// and the crown's object id. If nothing intercepts, the opaque hit stands.
+//
+// Overlapping crowns sum their PAD (SPEC.md 6.6). The object id reported for a voxel
+// several crowns reach is the smallest among them, matching the opaque tie-break rule.
+// @p hits is updated in place.
+void scan_vegetation(const std::vector<CrownBlock>& crowns, double voxel_size, double g_coef,
+                     const ScanGrid& grid, OpaqueHits& hits);

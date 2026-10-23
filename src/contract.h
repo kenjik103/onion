@@ -17,11 +17,14 @@ inline constexpr uint8_t CLASS_BUILDING = 6;
 // PROVISIONAL. SPEC.md 11 settles these at gate G4; they are gathered here so that
 // gate changes one block. G and VOXEL_SIZE_M are SPEC.md's stated defaults.
 //
-// CROWN_VOXEL_SIZE_M is 0.50 m, not SPEC.md's suggested 0.25 m, because 0.25 m was
-// measured against the real tree list and is impractical: 1511 M voxels, a 6.04 GB
-// crowns.bin for one 1 km tile. At 0.50 m the same tile is 203 M voxels and 0.81 GB.
-// The trade-off is recorded in NOTES/m4/README.md for G4 to settle.
-inline constexpr double CROWN_PAD = 0.5;            // plant area density, m2/m3
+// Settled at G4 on 2026-10-23 (NOTES/g4/README.md):
+//   CROWN_PAD 0.30 gives a canopy gap fraction of 19% on the Hoosier tile, mid-range of
+//   published leaf-on closed-canopy values. Gap fraction is one of the two metrics
+//   SPEC.md 12.10 names for validation against real airborne LiDAR.
+//   CROWN_VOXEL_SIZE_M is 0.50 m, not SPEC.md's suggested 0.25 m, because 0.25 m was
+//   measured against the real tree list and is impractical: 1511 M voxels and a 6.04 GB
+//   crowns.bin for one 1 km tile, against 203 M and 0.81 GB at 0.50 m.
+inline constexpr double CROWN_PAD = 0.30;           // plant area density, m2/m3
 inline constexpr double CROWN_G = 0.5;              // nadir projection, random leaves
 inline constexpr double CROWN_BASE_RATIO = 0.4;     // crown starts at this fraction of height
 inline constexpr double CROWN_VOXEL_SIZE_M = 0.50;  // metres
