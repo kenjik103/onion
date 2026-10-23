@@ -24,19 +24,33 @@
 #include <polyscope/surface_mesh.h>
 
 #include "contract_read.h"
+#include "las_read.h"
 
 namespace {
 
 const char* const USAGE =
     "usage:\n"
-    "  onion_viewer [--contract <dir>] [--screenshot <path.png>] [--view top|oblique]\n";
+    "  onion_viewer [--contract <dir>] [--screenshot <path.png>]\n"
+    "               [--view top|oblique|closeup|profile]\n";
 
 // Crown voxels run to hundreds of millions. Display-side decimation only: it is never
 // written back, and the factor is shown on screen so a screenshot can state it
 // (SPEC.md 9, V2).
 constexpr size_t MAX_CROWN_POINTS = 2000000;
+constexpr size_t MAX_LAS_POINTS = 3000000;
+
+// ASPRS classes the scene uses (FORMAT.md section 2).
+std::array<double, 3> class_colour(uint8_t cls) {
+    switch (cls) {
+        case 2: return {0.85, 0.55, 0.18};   // ground
+        case 5: return {0.13, 0.80, 0.22};   // high vegetation
+        case 6: return {0.95, 0.20, 0.25};   // building
+        default: return {0.60, 0.60, 0.60};
+    }
+}
 
 double g_scene_mid_z = 0.0;
+double g_centre_z = 0.0;   // ground height at the tile centre, for the close-up camera
 
 struct Vertices {
     std::vector<std::array<double, 3>> v;
@@ -141,15 +155,28 @@ void load_scene(const std::string& dir) {
     }
     g_scene_mid_z = 0.5 * (zlo + zhi);
 
+    // Ground height at the tile centre. The mid of the whole z range is not it: on a
+    // tile with relief the camera ends up under the terrain.
+    const double ccx = 0.5 * (meta.bbox[0] + meta.bbox[2]);
+    const double ccy = 0.5 * (meta.bbox[1] + meta.bbox[3]);
+    double best = 1e30;
+    g_centre_z = g_scene_mid_z;
+    for (size_t i = 0; i + 2 < mesh.xyz.size(); i += 3) {
+        const double dx = mesh.xyz[i] - ccx, dy = mesh.xyz[i + 1] - ccy;
+        const double d = dx * dx + dy * dy;
+        if (d < best) { best = d; g_centre_z = mesh.xyz[i + 2]; }
+    }
+
     const Vertices ground = submesh(mesh, 2);
     const Vertices bld = submesh(mesh, 6);
     if (!ground.f.empty()) {
         auto* s = polyscope::registerSurfaceMesh("terrain", ground.v, ground.f);
-        s->setSurfaceColor({0.45, 0.40, 0.32});
+        // Muted, so the class-coloured point cloud reads against it.
+        s->setSurfaceColor({0.72, 0.70, 0.66});
     }
     if (!bld.f.empty()) {
         auto* s = polyscope::registerSurfaceMesh("buildings", bld.v, bld.f);
-        s->setSurfaceColor({0.80, 0.35, 0.30});
+        s->setSurfaceColor({0.58, 0.56, 0.60});
     }
     if (!crowns.xyz.empty()) {
         std::vector<std::array<double, 3>> pts(crowns.pad.size());
@@ -163,16 +190,48 @@ void load_scene(const std::string& dir) {
         c->setPointRadius(0.5 * meta.voxel_size_m, false);
         c->addScalarQuantity("PAD", crowns.pad)->setEnabled(true);
     }
-    char msg[512];
+    // The point cloud, if a scan has been written. The viewer reads the LAS and the
+    // contract and nothing else (SPEC.md 6.11 rule 1).
+    size_t las_shown = 0, las_total = 0;
+    int las_stride = 1;
+    const std::string las_path = dir + "/points.las";
+    if (std::FILE* probe = std::fopen(las_path.c_str(), "rb")) {
+        std::fclose(probe);
+        const LasPoints lp =
+            read_las_points(las_path, meta.origin_x, meta.origin_y, MAX_LAS_POINTS);
+        las_total = lp.total;
+        las_stride = lp.stride;
+        las_shown = lp.cls.size();
+        std::vector<std::array<double, 3>> pts(lp.cls.size());
+        std::vector<std::array<double, 3>> col(lp.cls.size());
+        for (size_t i = 0; i < pts.size(); ++i) {
+            pts[i] = {lp.xyz[3 * i], lp.xyz[3 * i + 1], lp.xyz[3 * i + 2]};
+            col[i] = class_colour(lp.cls[i]);
+        }
+        auto* c = polyscope::registerPointCloud("point cloud", pts);
+        c->setPointRenderMode(polyscope::PointRenderMode::Quad);
+        c->setPointRadius(0.07, false);  // half the 0.14 m sample spacing
+        c->addColorQuantity("class", col)->setEnabled(true);
+        // The scanned cloud is the subject in V2, so the crowns it was cast through
+        // start hidden rather than obscuring it.
+        if (polyscope::hasPointCloud("crowns"))
+            polyscope::getPointCloud("crowns")->setEnabled(false);
+    }
+
+    char msg[768];
     std::snprintf(msg, sizeof msg,
                   "loaded %s\n  EPSG %d  tile %.0f x %.0f m\n"
                   "  %zu triangles, %zu objects\n"
-                  "  crowns %zu, %zu of %zu non-empty voxels shown (1 in %d)\n",
+                  "  crowns %zu, %zu of %zu non-empty voxels shown (1 in %d)\n"
+                  "  points %zu of %zu shown (1 in %d), display decimation only\n",
                   dir.c_str(), meta.epsg, meta.bbox[2], meta.bbox[3], mesh.cls.size(),
                   meta.n_objects, crowns.crown_count, crowns.pad.size(),
-                  crowns.total_nonempty, crowns.stride);
+                  crowns.total_nonempty, crowns.stride, las_shown, las_total, las_stride);
     append(msg);
     std::printf("%s", msg);
+    // The window then blocks in show(); without this the summary sits in the
+    // buffer and is lost if the process is killed or its output is piped.
+    std::fflush(stdout);
 }
 
 // A camera derived from the tile itself, so screenshots are reproducible and do not
@@ -185,6 +244,24 @@ void set_camera(const ContractMeta& m, const std::string& mode) {
     const float cz = static_cast<float>(g_scene_mid_z);
     const glm::vec3 target(cx, cy, cz);
     // Straight down is ambiguous for the up vector, so "top" is nudged a little south.
+    if (mode == "profile") {
+        // Near-horizontal, so the canopy reads as a layer above the ground rather than
+        // as green dust seen through from above. This is the view that shows vertical
+        // structure in a forested tile.
+        const float gz = static_cast<float>(g_centre_z);
+        polyscope::view::lookAt(glm::vec3(cx - 165.0f, cy - 18.0f, gz + 26.0f),
+                                glm::vec3(cx + 60.0f, cy, gz + 14.0f));
+        return;
+    }
+    if (mode == "closeup") {
+        // A few tens of metres across, so 7 cm points are actually resolvable and the
+        // cloud can be seen sitting on the surfaces rather than dusting them. Anchored
+        // on the ground at the tile centre, not the mid of the whole z range.
+        const float gz = static_cast<float>(g_centre_z);
+        polyscope::view::lookAt(glm::vec3(cx - 70.0f, cy - 70.0f, gz + 58.0f),
+                                glm::vec3(cx, cy, gz + 8.0f));
+        return;
+    }
     const glm::vec3 eye = (mode == "top")
                               ? glm::vec3(cx, cy - 0.02f * size, cz + 1.35f * size)
                               : glm::vec3(cx - 0.75f * size, cy - 0.75f * size, cz + 0.55f * size);

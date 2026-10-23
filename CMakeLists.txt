@@ -46,6 +46,7 @@ add_library(onion_core STATIC
   src/contract_read.cpp
   src/scanner.cpp
   src/las.cpp
+  src/las_read.cpp
   src/manifest.cpp
 )
 target_include_directories(onion_core PUBLIC src)
