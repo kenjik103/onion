@@ -68,8 +68,8 @@ def main():
     warp_to(f"/vsicurl/{GLO}{cell}/{cell}.tif", out / "glo.tif", te, (nx, ny), epsg, "bilinear")
     # Canopy aggregated to the DEM grid: a 30 m DSM cannot resolve a single crown, so
     # the fair comparison is the mean and the max canopy height inside each DEM cell.
-    warp_to(cache / "chm_v2.tif", out / "chm_mean.tif", te, (nx, ny), epsg, "average")
-    warp_to(cache / "chm_v2.tif", out / "chm_max.tif", te, (nx, ny), epsg, "max")
+    warp_to(cache / "chm.tif", out / "chm_mean.tif", te, (nx, ny), epsg, "average")
+    warp_to(cache / "chm.tif", out / "chm_max.tif", te, (nx, ny), epsg, "max")
     warp_to(cache / "landcover.tif", out / "lc.tif", te, (nx, ny), epsg, "mode")
 
     dtm = np.array(Image.open(cache / "terrain.tif")).astype(np.float64)

@@ -79,33 +79,31 @@ def chm_rgb(chm, vmax=30.0):
 def main():
     cache, out = Path(sys.argv[1]), Path(sys.argv[2])
     out.mkdir(parents=True, exist_ok=True)
-    layers = [cache / n for n in ("terrain.tif", "landcover.tif", "chm_v1.tif", "chm_v2.tif")]
+    layers = [cache / n for n in ("terrain.tif", "landcover.tif", "chm.tif")]
     te = [f"{v:.9f}" for v in common_box(layers)]
     print(f"common grid: {te} at {RES} m/px")
 
     # Every layer onto the same grid. Categorical land cover uses nearest; the rest bilinear.
     warp(cache / "terrain.tif", out / "t.tif", te, "bilinear")
     warp(cache / "landcover.tif", out / "lc.tif", te, "near")
-    warp(cache / "chm_v1.tif", out / "c1.tif", te, "bilinear")
-    warp(cache / "chm_v2.tif", out / "c2.tif", te, "bilinear")
+    warp(cache / "chm.tif", out / "chm.tif", te, "bilinear")
     run("gdaldem", "hillshade", "-q", out / "t.tif", out / "hs.tif")
     run("gdal_translate", "-q", "-expand", "rgb", out / "lc.tif", out / "lc_rgb.tif")
     run("gdal_rasterize", "-q", "-burn", 1, "-ot", "Byte", "-of", "GTiff",
         "-init", 0, "-te", *te, "-tr", RES, RES, cache / "buildings.fgb", out / "b.tif")
 
-    hs, lc, c1, c2 = read(out / "hs.tif"), read(out / "lc.tif"), read(out / "c1.tif"), read(out / "c2.tif")
+    hs, lc, chm = read(out / "hs.tif"), read(out / "lc.tif"), read(out / "chm.tif")
     lc_rgb, bld = read(out / "lc_rgb.tif"), read(out / "b.tif").astype(bool)
     bo = outline(bld)
     RED, WHITE = (255, 40, 40), (255, 255, 255)
 
     Image.fromarray(draw(grey_rgb(hs), bo, RED)).save(out / "01_hillshade_buildings.png")
     Image.fromarray(draw(lc_rgb, bo, WHITE)).save(out / "02_landcover_buildings.png")
-    Image.fromarray(draw(chm_rgb(c2), bo, RED)).save(out / "03_chm_v2_buildings.png")
-    Image.fromarray(draw(chm_rgb(c1), bo, RED)).save(out / "04_chm_v1_buildings.png")
+    Image.fromarray(draw(chm_rgb(chm), bo, RED)).save(out / "03_chm_buildings.png")
 
     # 2x2 panel so all four layers are compared at one glance, same grid, same scale.
     tiles = [draw(grey_rgb(hs), bo, RED), draw(lc_rgb, bo, WHITE),
-             draw(chm_rgb(c1), bo, RED), draw(chm_rgb(c2), bo, RED)]
+             draw(chm_rgb(chm), bo, RED), grey_rgb(hs)]
     h, w = tiles[0].shape[:2]
     panel = np.zeros((2 * h + 6, 2 * w + 6, 3), np.uint8)
     for i, t in enumerate(tiles):
@@ -126,7 +124,7 @@ def main():
     print(f"   building px on built-up class : {100.0 * (bld & built).sum() / max(bld.sum(), 1):5.1f}%")
     print(f"   built-up class share of tile  : {100.0 * built.sum() / lc.size:5.1f}%  (chance level)")
 
-    for name, chm in (("v1", c1), ("v2", c2)):
+    for name, chm in (("chm", chm),):
         print(f"\nB. WorldCover tree mask vs canopy {name} (independent sources):")
         print(f"   mean height on tree class     : {chm[tree].mean():5.2f} m" if tree.any() else "   no tree px")
         print(f"   mean height off tree class    : {chm[~tree].mean():5.2f} m")

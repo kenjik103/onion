@@ -40,14 +40,14 @@ is the only thing that has to move between machines.
 build/onion fetch --lat 38.20 --lon -86.40 --extent 1000 --seed 1 --cache ./cache
 ```
 
-Pulls five sources for the tile and writes them to `./cache`:
+Pulls four sources for the tile and writes them to `./cache`, creating it if absent:
 
 | file | source |
 |---|---|
 | `terrain.tif` | GEDTM30 v1.2 bare-earth DTM |
 | `landcover.tif` | ESA WorldCover v200 (2021) |
 | `chm.tif` | Meta/WRI canopy height v2 |
-| `chm_tiles.geojson` | canopy tile index (cached so a second run stays offline) |
+| `chm_tiles.geojson` | canopy tile index — a lookup aid, not a source; cached so a second run stays offline |
 | `buildings.fgb` | Overture buildings, reprojected to the tile's UTM zone |
 | `provenance.json` | per source: URL, version, vintage, SHA-256 |
 | `request.json` | the tile request |
@@ -63,7 +63,9 @@ build/onion generate --lat 38.20 --lon -86.40 --extent 1000 --seed 1 \
     --cache ./cache --out ./out
 ```
 
-About 19 s for a 1 km tile. Writes to `./out`:
+A few seconds to about 20 s for a 1 km tile, depending on how much canopy there is
+to trace through — measured 5 s on a half-open tile and 19 s on closed forest.
+Creates `./out` if absent and writes:
 
 | file | contents |
 |---|---|
@@ -121,9 +123,14 @@ python3 tools/m5_verify.py out 400            # points lie within 1 mm of a cont
 python3 tools/g4_crown.py out /tmp/g4         # gap fraction, voxel banding, cross-section
 ```
 
-`tools/` also holds the gate tooling used to settle the design decisions
-(`probe_tiles.py` to choose a tile on measured evidence, `g1_overlays.py`,
-`g2_terrain.py`, `g3_canopy.py`). None of it is on the pipeline's path.
+`tools/` also holds the gate tooling used to settle the design decisions:
+`probe_tiles.py` (choose a tile on measured evidence), `g1_overlays.py` (layer
+alignment), `g2_terrain.py` (is the DTM really bare earth). None of it is on the
+pipeline's path.
+
+`g3_canopy.py` is the exception: it compares the two Meta canopy versions, and `fetch`
+now pulls only v2, so it needs a cache holding both and says so if run without one. It
+is kept for the record, and in case that decision is reopened.
 
 ---
 

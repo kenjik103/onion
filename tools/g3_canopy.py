@@ -8,6 +8,10 @@ mask is there to remove.
 v1 and v2 are already pixel-aligned in the cache: fetch_raster derives the same output
 resolution for both, so no resampling is needed to compare them.
 
+G3 is settled (v2 was chosen on 2026-10-23) and `fetch` now pulls v2 only, so this
+needs a cache holding BOTH versions as `chm_v1.tif` and `chm_v2.tif`. It is kept for
+the record and for re-running the comparison if the decision is ever reopened.
+
 usage: g3_canopy.py <cache-dir> [<cache-dir> ...]
 """
 import json
@@ -33,6 +37,13 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     for cache in [Path(c) for c in sys.argv[1:]]:
+        missing = [n for n in ("chm_v1.tif", "chm_v2.tif") if not (cache / n).exists()]
+        if missing:
+            raise SystemExit(
+                f"{cache}: missing {', '.join(missing)}.\n"
+                "This tool compares the two canopy versions, but G3 settled on v2 and "
+                "fetch now pulls v2 only (as chm.tif). To re-run the comparison you need "
+                "a cache holding both versions.")
         req = json.loads((cache / "request.json").read_text())
         ci = info(cache / "chm_v2.tif")
         gt, (nx, ny) = ci["geoTransform"], ci["size"]
