@@ -105,6 +105,22 @@ double fetch_raster(const RasterFetch& f, const Grid& g) {
         throw;
     }
 
+    // Snap the output outward to a whole number of pixels, anchored at the padded
+    // south-west corner (the local origin, SPEC.md 6.2). Passing -te and -tr directly
+    // does NOT do this: GDAL rounds the pixel count to nearest, so an extent that is
+    // not an exact multiple of the resolution can round DOWN and leave the raster
+    // short of the padded box. Measured before this fix, landcover at 6.3518 m/px came
+    // out 2.074 m short on its east and south edges, which would have left the builders
+    // sampling outside the raster at the tile edge.
+    //
+    // -ts rather than -tr, so the pixel count is stated outright and no rounding
+    // remains to go wrong.
+    const double eps = 1e-9;
+    const int nx = static_cast<int>(std::ceil((g.padded_m.xmax - g.padded_m.xmin) / res - eps));
+    const int ny = static_cast<int>(std::ceil((g.padded_m.ymax - g.padded_m.ymin) / res - eps));
+    const double xmax = g.padded_m.xmin + nx * res;
+    const double ymax = g.padded_m.ymin + ny * res;
+
     CPLStringList argv;
     // -of is explicit because the warp writes to a ".partial" temporary name, and
     // GDAL's extension-based driver guess silently produces no output for an
@@ -112,8 +128,8 @@ double fetch_raster(const RasterFetch& f, const Grid& g) {
     for (const std::string& a : {std::string("-of"), std::string("GTiff"),
                                  std::string("-t_srs"), "EPSG:" + std::to_string(g.utm_epsg),
                                  std::string("-te"), num(g.padded_m.xmin), num(g.padded_m.ymin),
-                                 num(g.padded_m.xmax), num(g.padded_m.ymax),
-                                 std::string("-tr"), num(res), num(res),
+                                 num(xmax), num(ymax),
+                                 std::string("-ts"), std::to_string(nx), std::to_string(ny),
                                  std::string("-r"), std::string(f.resampling)})
         argv.AddString(a.c_str());
 

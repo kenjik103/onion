@@ -158,12 +158,14 @@ The two corrections run in opposite directions, which is why they cannot share a
 
 ### Cached raster check, Fargo tile
 
-All four share the padded north-west corner `(667829.644455594, 5194760.116763453)`.
+All four are anchored at the padded **south-west** corner (the local origin) and snapped
+outward to a whole number of their own pixels, so each covers the padded box completely.
+See `NOTES/g1/README.md` for the gdalwarp rounding bug this rule fixes.
 
 | File | Size | Type | Range |
 |---|---|---|---|
 | `terrain.tif` | 53 x 53 | Float32 | 262.65 – 288.42 m, mean 276.16 |
-| `landcover.tif` | 176 x 176 | Byte (palette) | 10 – 60 |
+| `landcover.tif` | 177 x 177 | Byte (palette) | 10 – 60 |
 | `chm_v1.tif` | 1374 x 1374 | Byte | 0 – 29 m, mean 0.74 |
 | `chm_v2.tif` | 1374 x 1374 | Byte | 0 – 20 m, mean 1.01 |
 
