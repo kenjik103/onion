@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <exception>
 #include <map>
@@ -6,13 +7,18 @@
 #include <string>
 
 #include <cpl_conv.h>
+#include <ogr_spatialref.h>
 #include <gdal_priv.h>
 
 #include "fetch.h"
 #include "grid.h"
 #include "request.h"
 #include "builders.h"
+#include "contract_read.h"
 #include "contract_write.h"
+#include "las.h"
+#include "manifest.h"
+#include "scanner.h"
 #include "scene_spec.h"
 
 namespace {
@@ -155,6 +161,66 @@ void cmd_generate(Flags& flags) {
     write_scene_geometry_json(g, objects, out + "/scene_geometry.json");
     std::printf("  contract     opaque.ply, crowns.bin, scene_geometry.json (v%d)\n",
                 CONTRACT_FORMAT_VERSION);
+
+    // The scanner reads the contract and nothing else (SPEC.md 4.4), so the files are
+    // read back rather than the in-memory mesh reused. That exercises the round trip on
+    // every run.
+    const ContractMesh scene = read_opaque_ply(out + "/opaque.ply");
+
+    // Samples cover the tile, not the padded box (SPEC.md 6.9). floor, because the
+    // extent need not be a whole number of 0.14 m cells; the leftover strip under one
+    // cell wide is not sampled.
+    ScanGrid sg;
+    sg.x0 = g.tile_m.xmin - g.origin_x;
+    sg.y0 = g.tile_m.ymin - g.origin_y;
+    sg.nx = static_cast<int>(std::floor(r.extent_m / SCAN_SPACING_M));
+    sg.ny = sg.nx;
+    sg.seed = r.seed;
+    const OpaqueHits hits = scan_opaque(scene, scene.object_id, sg);
+    std::printf("  scan         %d x %d samples, %zu opaque hits\n", sg.nx, sg.ny,
+                hits.hit_count);
+
+    double bounds[6] = {1e308, -1e308, 1e308, -1e308, 1e308, -1e308};
+    for (int j = 0; j < sg.ny; ++j)
+        for (int i = 0; i < sg.nx; ++i) {
+            const size_t s = static_cast<size_t>(j) * sg.nx + i;
+            if (hits.z[s] == SCAN_MISS_Z) continue;
+            double sx, sy;
+            sample_xy(sg, i, j, sx, sy);
+            const double wx = sx + g.origin_x;
+            const double wy = sy + g.origin_y;
+            bounds[0] = std::min(bounds[0], wx); bounds[1] = std::max(bounds[1], wx);
+            bounds[2] = std::min(bounds[2], wy); bounds[3] = std::max(bounds[3], wy);
+            bounds[4] = std::min<double>(bounds[4], hits.z[s]);
+            bounds[5] = std::max<double>(bounds[5], hits.z[s]);
+        }
+
+    OGRSpatialReference srs;
+    if (srs.importFromEPSG(g.utm_epsg) != OGRERR_NONE)
+        throw std::runtime_error("generate: cannot load EPSG for the LAS CRS VLR");
+    srs.SetAxisMappingStrategy(OAMS_TRADITIONAL_GIS_ORDER);
+    char* wkt_raw = nullptr;
+    if (srs.exportToWkt(&wkt_raw) != OGRERR_NONE || !wkt_raw)
+        throw std::runtime_error("generate: cannot export WKT for the LAS CRS VLR");
+    const std::string wkt(wkt_raw);
+    CPLFree(wkt_raw);
+
+    LasOut las = las_begin(out + "/points.las", g.origin_x, g.origin_y, wkt,
+                           hits.hit_count, bounds);
+    for (int j = 0; j < sg.ny; ++j)
+        for (int i = 0; i < sg.nx; ++i) {
+            const size_t s = static_cast<size_t>(j) * sg.nx + i;
+            if (hits.z[s] == SCAN_MISS_Z) continue;
+            double sx, sy;
+            sample_xy(sg, i, j, sx, sy);
+            las_point(las, {sx + g.origin_x, sy + g.origin_y, hits.z[s],
+                            hits.object_id[s], hits.cls[s]});
+        }
+    las_end(las);
+    std::printf("  las          points.las, %zu points\n", hits.hit_count);
+
+    write_manifest(r, g, cache, out, hits.hit_count);
+    std::printf("  manifest     manifest.json\n");
 }
 
 }  // namespace

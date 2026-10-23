@@ -19,8 +19,9 @@ struct ContractMeta {
 
 struct ContractMesh {
     std::vector<float> xyz;         // 3 per vertex, local
-    std::vector<uint32_t> indices;  // 3 per face
-    std::vector<uint8_t> cls;       // 1 per face
+    std::vector<uint32_t> indices;    // 3 per face
+    std::vector<uint32_t> object_id;  // 1 per face
+    std::vector<uint8_t> cls;         // 1 per face
 };
 
 // Crown voxel centres. crowns.bin is hundreds of megabytes and most voxels are empty,

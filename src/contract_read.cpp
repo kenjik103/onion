@@ -76,14 +76,14 @@ ContractMesh read_opaque_ply(const std::string& path) {
     get(f.get(), m.xyz.data(), m.xyz.size() * sizeof(float), path);
 
     m.indices.resize(nf * 3);
+    m.object_id.resize(nf);
     m.cls.resize(nf);
     for (size_t i = 0; i < nf; ++i) {
         uint8_t n = 0;
         get(f.get(), &n, 1, path);
         if (n != 3) throw std::runtime_error("contract: non-triangular face in " + path);
         get(f.get(), &m.indices[3 * i], 3 * sizeof(uint32_t), path);
-        uint32_t oid = 0;
-        get(f.get(), &oid, sizeof(uint32_t), path);  // object_id, unused by the viewer
+        get(f.get(), &m.object_id[i], sizeof(uint32_t), path);
         get(f.get(), &m.cls[i], 1, path);
     }
     return m;
