@@ -62,22 +62,20 @@ Provenance fetch_landcover(const std::string& cache, const Grid& g) {
                             "2021-01-01/2021-12-31", g);
 }
 
-Provenance fetch_canopy(const std::string& cache, const std::string& ver,
-                        const std::string& base, const Grid& g) {
-    const std::string index_file = "chm_" + ver + "_tiles.geojson";
-    const std::string index_path = cache_path(cache, index_file);
+Provenance fetch_canopy(const std::string& cache, const Grid& g) {
+    const std::string index_path = cache_path(cache, "chm_tiles.geojson");
     const bool had_index = file_exists(index_path);
-    cache_remote_file(base + "tiles.geojson", index_path);
-    if (!had_index) std::printf("  %-12s index cached\n", ("chm_" + ver).c_str());
+    cache_remote_file(std::string(CANOPY_BASE) + "tiles.geojson", index_path);
+    if (!had_index) std::printf("  %-12s index cached\n", "chm");
 
     const std::string tile = canopy_tile_for(index_path, g);
-    // Source imagery vintage varies by location (gotcha 7). v1 publishes a per-pixel
-    // acquisition date raster; v2's bucket holds no equivalent.
-    const std::string vintage =
-        ver == "v1" ? "varies by location; see CHM_acquisition_date.tif in the v1 bucket"
-                    : "varies by location; not published per tile for v2";
-    return fetch_one_raster(cache, "chm_" + ver, base + "chm/" + tile + ".tif", "bilinear",
-                            "Meta/WRI canopy height " + ver + ", tile " + tile, vintage, g);
+    return fetch_one_raster(cache, "chm", std::string(CANOPY_BASE) + "chm/" + tile + ".tif",
+                            "bilinear",
+                            std::string("Meta/WRI canopy height ") + CANOPY_VERSION +
+                                ", tile " + tile,
+                            // Source imagery vintage varies by location (gotcha 7) and v2
+                            // publishes no per-tile acquisition date.
+                            "varies by location; not published per tile for v2", g);
 }
 
 Provenance fetch_overture_buildings(const std::string& cache, const Grid& g) {
@@ -118,8 +116,7 @@ void run_fetch(const TileRequest& r, const std::string& cache) {
     std::vector<Provenance> prov;
     prov.push_back(fetch_terrain(cache, g));
     prov.push_back(fetch_landcover(cache, g));
-    prov.push_back(fetch_canopy(cache, "v1", CANOPY_V1_BASE, g));
-    prov.push_back(fetch_canopy(cache, "v2", CANOPY_V2_BASE, g));
+    prov.push_back(fetch_canopy(cache, g));
     prov.push_back(fetch_overture_buildings(cache, g));
 
     write_provenance(cache, prov);

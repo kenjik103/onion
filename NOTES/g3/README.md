@@ -132,3 +132,15 @@ measurement corrects that.
 Against it: v2 is the newer, less-exercised product, and the ~6 m height difference in
 closed forest is large and unresolved without ground truth. Whichever is chosen, the
 version is pinned in the manifest, so the choice stays auditable and reversible.
+
+---
+
+## Decision (2026-10-23): **v2**
+
+Confirmed by the user. `fetch` now pulls v2 only — keeping both would be a configuration
+knob for a use that does not exist yet (CLAUDE.md). The cached file is `chm.tif` and the
+version is recorded in `provenance.json`, so a future change of version stays auditable
+without renaming anything.
+
+The ~6 m closed-forest disagreement is unresolved, not settled. It is the natural first
+question for scan validation against real airborne LiDAR (SPEC.md 12.10).

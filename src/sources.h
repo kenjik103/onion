@@ -15,11 +15,12 @@ inline const char* const GEDTM30_URL =
 inline const char* const WORLDCOVER_BASE =
     "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/";
 
-inline const char* const CANOPY_V1_BASE =
-    "https://dataforgood-fb-data.s3.us-east-1.amazonaws.com/forests/v1/alsgedi_global_v6_float/";
-
-inline const char* const CANOPY_V2_BASE =
+// v2 (CHMv2, DINOv3-based), chosen at gate G3 on 2026-10-23; see NOTES/g3/README.md.
+// The version is recorded in the provenance, not in the cache file name, so a future
+// change of version stays auditable without renaming anything.
+inline const char* const CANOPY_BASE =
     "https://dataforgood-fb-data.s3.us-east-1.amazonaws.com/forests/v2/global/dinov3_global_chm_v2_ml3/";
+inline const char* const CANOPY_VERSION = "v2";
 
 // Pinned, and recorded in the manifest (SPEC.md 6.10). Latest release as of
 // 2026-10-23; the two older ones present are 2026-09-23.0 and 2026-09-23.1.

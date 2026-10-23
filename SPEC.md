@@ -200,7 +200,7 @@ Layer toggles: terrain, buildings, crowns (voxel centers colored by PAD), and (V
   - EPSG:3857 pixels are not ground meters: at latitude 47 the 1.1943 m pixel is ≈ `1.1943·cos φ` = **0.81 m on the ground.** The fetch resolution must account for Mercator distortion.
 - **Layout differs:** v1 is **not a COG** (65536×1 strips, `PREDICTOR=2`, no overviews); v2 **is** a COG (512×512 blocks, 6 overview levels, `PER_DATASET` mask band in place of a NoData value). Measured at G3, the read-cost penalty is real but modest — a 1 km windowed read took 0.92 s for v1 against 0.50 s for v2 — so this is a minor practical argument, not a decisive one.
 - Source imagery vintage varies by location, so expect disagreements with the other layers where land has changed.
-- Which version to use is decided at gate G3.
+- ~~Which version to use is decided at gate G3.~~ **Decided at G3 (2026-10-23): v2.** v2 tracks the independent GLO-30 surface better (corr +0.400 vs +0.179) with a physically plausible implied X-band penetration fraction, agrees better with the tree mask in forest (F1 0.968 vs 0.956), and carries 2.3x the gradient energy — which matters because M3 must resolve individual crowns. `fetch` now pulls v2 only; the version lives in the provenance, not the cache file name. See `NOTES/g3/README.md`.
 
 ### 7.4 Buildings: Overture Maps
 - `s3://overturemaps-us-west-2/release/<RELEASE>/theme=buildings/type=building/*`: GeoParquet, EPSG:4326, with `bbox` struct columns for row-group pruning.
@@ -341,7 +341,7 @@ if (res->HasError()) throw std::runtime_error(res->GetError());
 | M2 | Four fetchers, cache, provenance | `fetch` on the test tile produces 3 GeoTIFFs + a building file + provenance; a second run makes no network requests; `gdalinfo` results recorded per source |
 | **G1** | Alignment | PNG overlays on one extent (DTM hillshade, land cover, canopy height, building outlines) agree on where things are |
 | **G2** | Terrain source | On a forested tile (agent proposes one with high WorldCover tree fraction; user confirms), GLO-30 minus GEDTM30 looks like canopy height and roughly matches the canopy map |
-| **G3** | Canopy version | v1 vs. v2 on the same tile, compared against the WorldCover tree mask; also report canopy heights inside Overture footprints (the rooftop contamination the mask removes); the user picks a version |
+| **G3** | Canopy version | v1 vs. v2 on the same tile, compared against the WorldCover tree mask; also report canopy heights inside Overture footprints (the rooftop contamination the mask removes); the user picks a version. **PASSED 2026-10-23: v2 chosen.** Run on two tiles — Hoosier NF for the version comparison, Fargo for rooftop contamination, which needs buildings. v2 reads ~6 m taller in closed forest; contamination did not discriminate (0.317% vs 0.315% surviving the mask) |
 | M3 | Scene spec + tree detection | Detected crowns overlaid on the canopy map (PNG), with counts and height distribution; the agent proposes the detection method with evidence, the user approves |
 | M4 | Builders → scene geometry contract | Contract files for the test tile plus `FORMAT.md`; a separate reader written only from `FORMAT.md` loads every file; terrain covers the padded tile with no gaps; every primitive has an object ID and class; no local coordinate exceeds the padded tile size |
 | V1 | Viewer: scene geometry | First, an empty Polyscope window opens on the user's workstation and `--screenshot` writes a PNG headless; then terrain, buildings, and crowns render with toggles; screenshots of the test tile match the G1 overlays; Run on the test tile produces the same outputs as the CLI |
@@ -360,7 +360,7 @@ Fix root causes, not symptoms. Make surgical changes. Never stack speculative fi
 
 ## 11. Open decisions (the user owns these)
 
-- **Canopy height map version** (G3)
+- ~~**Canopy height map version** (G3)~~ — **resolved 2026-10-23: v2.**
 - **Tree archetype:** PAD, G (default 0.5, the random leaf orientation value), crown-base ratio, envelope shape, voxel size (default 0.25 m, as in prior work). Settled at G4.
 - **Building height constant**
 - **Tree detection method** (the agent proposes at M3)
