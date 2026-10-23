@@ -114,9 +114,10 @@ Three consequences:
 2. **EPSG:3857 pixels are not ground metres.** At latitude 47 the 1.1943 m pixel is
    about `1.1943 * cos(47)` = **0.81 m on the ground**. The fetch resolution for this
    source must account for Mercator distortion.
-3. **v1's 65536x1 strip layout makes windowed reads expensive** (a small window forces
-   full-width strip decompression); v2 is a proper COG. A practical argument for v2 at
-   G3, to be presented there alongside the quality comparison.
+3. **v1 is not a COG** (65536x1 strips, no overviews) while v2 is. **Measured at G3, the
+   penalty is real but modest:** a 1 km windowed read took **0.92 s for v1 against 0.50 s
+   for v2**. An earlier version of this note called v1's reads "expensive", which
+   overstated it; the measurement corrects it.
 
 ---
 

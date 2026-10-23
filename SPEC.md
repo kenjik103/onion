@@ -198,7 +198,7 @@ Layer toggles: terrain, buildings, crowns (voxel centers colored by PAD), and (V
 - **Verified with `gdalinfo`, both versions: Byte (uint8) in meters, EPSG:3857, pixel 1.1943 m, no NoData and no scale.** Two consequences:
   - Despite "float" in the v1 path name, canopy height is **uint8, so tree heights are quantized to 1 m.** This constrains tree detection (M3) and the crown archetype (G4).
   - EPSG:3857 pixels are not ground meters: at latitude 47 the 1.1943 m pixel is ≈ `1.1943·cos φ` = **0.81 m on the ground.** The fetch resolution must account for Mercator distortion.
-- **Layout differs and matters:** v1 is **not a COG** (65536×1 strips, `PREDICTOR=2`, no overviews), so windowed reads force full-width strip decompression. v2 **is** a COG (512×512 blocks, 6 overview levels, `PER_DATASET` mask band in place of a NoData value). This is a practical argument for v2 at G3, independent of quality.
+- **Layout differs:** v1 is **not a COG** (65536×1 strips, `PREDICTOR=2`, no overviews); v2 **is** a COG (512×512 blocks, 6 overview levels, `PER_DATASET` mask band in place of a NoData value). Measured at G3, the read-cost penalty is real but modest — a 1 km windowed read took 0.92 s for v1 against 0.50 s for v2 — so this is a minor practical argument, not a decisive one.
 - Source imagery vintage varies by location, so expect disagreements with the other layers where land has changed.
 - Which version to use is decided at gate G3.
 
