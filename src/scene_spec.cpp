@@ -27,9 +27,10 @@ CPLJSONArray xy_ring(const OGRLinearRing* ring) {
 }
 
 // One entry per polygon part, all parts of a building sharing its id, so a multi-part
-// building stays one object (SPEC.md 6.7) without losing geometry. Measured on the test
-// tiles: 794 of 795 Fargo buildings are single-part, one has two parts, and no building
-// has an interior ring.
+// building stays one object (SPEC.md 6.7) without losing geometry. `polygon_utm` is a
+// list of rings: the exterior first, then any interior rings (courtyards). Measured:
+// 794 of 795 Fargo buildings are single-part; 8 of 1307 Boston buildings have
+// courtyards, one of them two.
 CPLJSONArray read_buildings(const std::string& path, std::vector<Footprint>& out_fp) {
     const GDALDatasetUniquePtr ds(GDALDataset::Open(path.c_str(), GDAL_OF_VECTOR));
     if (!ds) throw std::runtime_error("scene spec: cannot open " + path);
@@ -53,26 +54,30 @@ CPLJSONArray read_buildings(const std::string& path, std::vector<Footprint>& out
         }
 
         for (const OGRPolygon* p : parts) {
-            // Courtyards would extrude as solid. None occur in the test tiles, so this
-            // fails loudly rather than producing silently wrong geometry (SPEC.md 4.2).
-            if (p->getNumInteriorRings() != 0)
-                throw std::runtime_error("scene spec: building " + id +
-                                         " has an interior ring; extruding footprints with "
-                                         "holes is not implemented");
-            const OGRLinearRing* ring = p->getExteriorRing();
             Footprint fp;
             fp.id = id;
             fp.height_m = BUILDING_HEIGHT_M;
-            const int nv = ring->getNumPoints() > 1 ? ring->getNumPoints() - 1 : 0;
-            for (int i = 0; i < nv; ++i) {
-                fp.xy.push_back(ring->getX(i));
-                fp.xy.push_back(ring->getY(i));
+
+            // Exterior first, then any interior rings (courtyards).
+            CPLJSONArray poly;
+            std::vector<const OGRLinearRing*> rs{p->getExteriorRing()};
+            for (int k = 0; k < p->getNumInteriorRings(); ++k)
+                rs.push_back(p->getInteriorRing(k));
+            for (const OGRLinearRing* ring : rs) {
+                std::vector<double> xy;
+                const int nv = ring->getNumPoints() > 1 ? ring->getNumPoints() - 1 : 0;
+                for (int i = 0; i < nv; ++i) {
+                    xy.push_back(ring->getX(i));
+                    xy.push_back(ring->getY(i));
+                }
+                fp.rings.push_back(std::move(xy));
+                poly.Add(xy_ring(ring));
             }
             out_fp.push_back(std::move(fp));
 
             CPLJSONObject b;
             b.Add("id", id);
-            b.Add("polygon_utm", xy_ring(ring));
+            b.Add("polygon_utm", poly);
             b.Add("height_m", BUILDING_HEIGHT_M);
             out.Add(b);
         }

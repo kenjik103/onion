@@ -100,3 +100,8 @@ add_executable(test_crown tests/test_crown.cpp)
 target_link_libraries(test_crown PRIVATE onion_core)
 target_compile_options(test_crown PRIVATE ${ONION_WARNINGS})
 add_test(NAME crown COMMAND test_crown)
+
+add_executable(test_builders tests/test_builders.cpp)
+target_link_libraries(test_builders PRIVATE onion_core)
+target_compile_options(test_builders PRIVATE ${ONION_WARNINGS})
+add_test(NAME builders COMMAND test_builders)

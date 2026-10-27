@@ -7,15 +7,15 @@
     "sha256":"6eb52110b978b884ba80499e0cb7544cb9fa55bec73d6d299c7c8b7101434a9b"
   },
   "landcover":{
-    "url":"https:\/\/esa-worldcover.s3.eu-central-1.amazonaws.com\/v200\/2021\/map\/ESA_WorldCover_10m_2021_v200_N36W087_Map.tif",
-    "version":"ESA WorldCover v200 (2021), tile N36W087",
+    "url":"https:\/\/esa-worldcover.s3.eu-central-1.amazonaws.com\/v200\/2021\/map\/ESA_WorldCover_10m_2021_v200_N42W072_Map.tif",
+    "version":"ESA WorldCover v200 (2021), tile N42W072",
     "vintage":"2021-01-01\/2021-12-31",
     "file":"landcover.tif",
     "sha256":"138868eb692b3468ae070a8d47688e8875d9f81dbf10dacee27f28836f107dad"
   },
   "chm":{
-    "url":"https:\/\/dataforgood-fb-data.s3.us-east-1.amazonaws.com\/forests\/v2\/global\/dinov3_global_chm_v2_ml3\/chm\/0320003030.tif",
-    "version":"Meta\/WRI canopy height v2, tile 0320003030",
+    "url":"https:\/\/dataforgood-fb-data.s3.us-east-1.amazonaws.com\/forests\/v2\/global\/dinov3_global_chm_v2_ml3\/chm\/0302332121.tif",
+    "version":"Meta\/WRI canopy height v2, tile 0302332121",
     "vintage":"varies by location; not published per tile for v2",
     "file":"chm.tif",
     "sha256":"4cabcc0f962a544d11193f91ec5c786e803147ac810b65e26fff6561ebdecb0c"

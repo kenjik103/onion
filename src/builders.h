@@ -9,10 +9,12 @@
 #include "trees.h"
 
 // One building footprint from the scene spec, already in UTM metres.
+// rings[0] is the exterior; any further rings are interior (courtyards). Each ring is
+// x,y pairs and is not closed.
 struct Footprint {
     std::string id;
     double height_m = 0;
-    std::vector<double> xy;  // exterior ring, x,y pairs, not closed
+    std::vector<std::vector<double>> rings;
 };
 
 // SPEC.md 6.5. Bicubically upsamples the terrain raster to a 1 m grid over the padded

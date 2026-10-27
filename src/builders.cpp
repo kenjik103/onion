@@ -34,6 +34,92 @@ double sample_bicubic(const Raster& r, double x, double y) {
     return cubic(col[0], col[1], col[2], col[3], fy);
 }
 
+double ring_area2(const std::vector<double>& r) {
+    double a = 0.0;
+    const int n = static_cast<int>(r.size() / 2);
+    for (int i = 0, j = n - 1; i < n; j = i++)
+        a += r[2 * j] * r[2 * i + 1] - r[2 * i] * r[2 * j + 1];
+    return a;
+}
+
+// Splice interior rings into the exterior with two-way bridges, turning a polygon with
+// holes into one simple polygon the ear clipper can handle. Standard hole elimination:
+// take the hole's rightmost vertex, cast a ray to +x, and bridge to the best vertex of
+// the edge it hits.
+std::vector<double> eliminate_holes(const std::vector<std::vector<double>>& rings) {
+    std::vector<double> outer = rings[0];
+    if (ring_area2(outer) < 0) {  // exterior counter-clockwise
+        std::vector<double> r;
+        for (int i = static_cast<int>(outer.size() / 2) - 1; i >= 0; --i) {
+            r.push_back(outer[2 * i]);
+            r.push_back(outer[2 * i + 1]);
+        }
+        outer.swap(r);
+    }
+
+    // Process holes right to left, so an earlier bridge cannot block a later one.
+    std::vector<size_t> order;
+    for (size_t h = 1; h < rings.size(); ++h) order.push_back(h);
+    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        double ma = -1e300, mb = -1e300;
+        for (size_t i = 0; i < rings[a].size(); i += 2) ma = std::max(ma, rings[a][i]);
+        for (size_t i = 0; i < rings[b].size(); i += 2) mb = std::max(mb, rings[b][i]);
+        return ma > mb;
+    });
+
+    for (const size_t h : order) {
+        std::vector<double> hole = rings[h];
+        const int hn = static_cast<int>(hole.size() / 2);
+        if (hn < 3) continue;
+        if (ring_area2(hole) > 0) {  // holes clockwise, opposite the exterior
+            std::vector<double> r;
+            for (int i = hn - 1; i >= 0; --i) {
+                r.push_back(hole[2 * i]);
+                r.push_back(hole[2 * i + 1]);
+            }
+            hole.swap(r);
+        }
+        int m = 0;
+        for (int i = 1; i < hn; ++i)
+            if (hole[2 * i] > hole[2 * m]) m = i;
+        const double mx = hole[2 * m], my = hole[2 * m + 1];
+
+        // Ray from (mx,my) toward +x: find the nearest crossing on the exterior and
+        // bridge to whichever endpoint of that edge lies further right.
+        const int on = static_cast<int>(outer.size() / 2);
+        int best = -1;
+        double best_x = 1e300;
+        for (int i = 0, j = on - 1; i < on; j = i++) {
+            const double y1 = outer[2 * j + 1], y2 = outer[2 * i + 1];
+            if ((y1 > my) == (y2 > my)) continue;
+            const double t = (my - y1) / (y2 - y1);
+            const double x = outer[2 * j] + t * (outer[2 * i] - outer[2 * j]);
+            if (x >= mx && x < best_x) {
+                best_x = x;
+                best = (outer[2 * i] > outer[2 * j]) ? i : j;
+            }
+        }
+        if (best < 0) continue;  // no crossing: ring is not actually inside, leave it
+
+        std::vector<double> merged;
+        for (int i = 0; i <= best; ++i) {
+            merged.push_back(outer[2 * i]);
+            merged.push_back(outer[2 * i + 1]);
+        }
+        for (int k = 0; k <= hn; ++k) {
+            const int i = (m + k) % hn;
+            merged.push_back(hole[2 * i]);
+            merged.push_back(hole[2 * i + 1]);
+        }
+        for (int i = best; i < on; ++i) {
+            merged.push_back(outer[2 * i]);
+            merged.push_back(outer[2 * i + 1]);
+        }
+        outer.swap(merged);
+    }
+    return outer;
+}
+
 // Ear clipping for a simple polygon. Footprints are concave often enough (L and U
 // shapes) that a triangle fan would produce geometry outside the footprint.
 std::vector<int> triangulate(const std::vector<double>& xy) {
@@ -51,7 +137,14 @@ std::vector<int> triangulate(const std::vector<double>& xy) {
         return (xy[2 * b] - xy[2 * a]) * (xy[2 * c + 1] - xy[2 * a + 1]) -
                (xy[2 * b + 1] - xy[2 * a + 1]) * (xy[2 * c] - xy[2 * a]);
     };
+    // Compare coordinates, not indices. Hole bridging duplicates vertices, so a copy of
+    // the ear's own corner sits exactly on the triangle's boundary at a different index
+    // and would otherwise veto every ear, leaving the roof untriangulated.
+    const auto same = [&](int p, int q) {
+        return xy[2 * p] == xy[2 * q] && xy[2 * p + 1] == xy[2 * q + 1];
+    };
     const auto inside = [&](int a, int b, int c, int p) {
+        if (same(p, a) || same(p, b) || same(p, c)) return false;
         return cross(a, b, p) >= 0 && cross(b, c, p) >= 0 && cross(c, a, p) >= 0;
     };
 
@@ -153,37 +246,59 @@ uint32_t build_buildings(const std::vector<Footprint>& fps, const Raster& terrai
                          uint32_t first_object_id, Mesh& m, std::vector<ObjectRow>& objects) {
     uint32_t oid = first_object_id;
     for (const Footprint& raw : fps) {
-        if (raw.xy.size() < 6)
+        if (raw.rings.empty() || raw.rings[0].size() < 6)
             throw std::runtime_error("buildings: footprint " + raw.id + " has under 3 vertices");
-        Footprint f = raw;
-        f.xy = clip_to_rect(raw.xy, g.padded_m);
-        const int n = static_cast<int>(f.xy.size() / 2);
-        if (n < 3) continue;  // falls entirely outside the padded tile
+
+        std::vector<std::vector<double>> rings;
+        rings.push_back(clip_to_rect(raw.rings[0], g.padded_m));
+        if (rings[0].size() < 6) continue;  // falls entirely outside the padded tile
+
+        // Interior rings are kept only when the exterior survived clipping untouched.
+        // A building the padded edge cuts is at least 60 m outside the sampled tile and
+        // is never scanned, so a courtyard there cannot affect the output.
+        const bool clipped = rings[0].size() != raw.rings[0].size();
+        if (!clipped)
+            for (size_t h = 1; h < raw.rings.size(); ++h)
+                if (raw.rings[h].size() >= 6) rings.push_back(raw.rings[h]);
 
         // Base at the minimum terrain elevation under the footprint, so the solid never
         // floats on sloping ground (SPEC.md 6.7).
         double base_z = 1e30;
-        for (int i = 0; i < n; ++i)
-            base_z = std::min(base_z, sample_bicubic(terrain, f.xy[2 * i], f.xy[2 * i + 1]));
+        for (const std::vector<double>& r : rings)
+            for (size_t i = 0; i < r.size(); i += 2)
+                base_z = std::min(base_z, sample_bicubic(terrain, r[i], r[i + 1]));
         const float zb = static_cast<float>(base_z);
-        const float zt = static_cast<float>(base_z + f.height_m);
+        const float zt = static_cast<float>(base_z + raw.height_m);
 
-        std::vector<uint32_t> bot(n), top(n);
-        for (int i = 0; i < n; ++i) {
-            const float lx = to_local(f.xy[2 * i], g.origin_x);
-            const float ly = to_local(f.xy[2 * i + 1], g.origin_y);
-            bot[i] = add_vertex(m, lx, ly, zb);
-            top[i] = add_vertex(m, lx, ly, zt);
+        // Walls for every ring. An interior ring gives the courtyard walls, which are
+        // as real as the outside ones.
+        for (const std::vector<double>& r : rings) {
+            const int n = static_cast<int>(r.size() / 2);
+            std::vector<uint32_t> bot(n), top(n);
+            for (int i = 0; i < n; ++i) {
+                const float lx = to_local(r[2 * i], g.origin_x);
+                const float ly = to_local(r[2 * i + 1], g.origin_y);
+                bot[i] = add_vertex(m, lx, ly, zb);
+                top[i] = add_vertex(m, lx, ly, zt);
+            }
+            for (int i = 0; i < n; ++i) {
+                const int j = (i + 1) % n;
+                add_face(m, bot[i], bot[j], top[j], oid, CLASS_BUILDING);
+                add_face(m, bot[i], top[j], top[i], oid, CLASS_BUILDING);
+            }
         }
-        for (int i = 0; i < n; ++i) {
-            const int j = (i + 1) % n;
-            add_face(m, bot[i], bot[j], top[j], oid, CLASS_BUILDING);
-            add_face(m, bot[i], top[j], top[i], oid, CLASS_BUILDING);
-        }
-        const std::vector<int> roof = triangulate(f.xy);
+
+        // Roof: bridge any holes into the exterior, then ear-clip the result.
+        const std::vector<double> flat = rings.size() > 1 ? eliminate_holes(rings) : rings[0];
+        std::vector<uint32_t> rv(flat.size() / 2);
+        for (size_t i = 0; i < rv.size(); ++i)
+            rv[i] = add_vertex(m, to_local(flat[2 * i], g.origin_x),
+                               to_local(flat[2 * i + 1], g.origin_y), zt);
+        const std::vector<int> roof = triangulate(flat);
         for (size_t t = 0; t + 2 < roof.size(); t += 3)
-            add_face(m, top[roof[t]], top[roof[t + 1]], top[roof[t + 2]], oid, CLASS_BUILDING);
-        objects.push_back({oid, CLASS_BUILDING, "overture:" + f.id});
+            add_face(m, rv[roof[t]], rv[roof[t + 1]], rv[roof[t + 2]], oid, CLASS_BUILDING);
+
+        objects.push_back({oid, CLASS_BUILDING, "overture:" + raw.id});
         ++oid;
     }
     return oid;
