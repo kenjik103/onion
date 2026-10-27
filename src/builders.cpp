@@ -8,32 +8,6 @@ namespace {
 
 float to_local(double v, double origin) { return static_cast<float>(v - origin); }
 
-// Catmull-Rom, the interpolating cubic. Used for the terrain upsample (SPEC.md 6.5).
-double cubic(double p0, double p1, double p2, double p3, double t) {
-    return p1 + 0.5 * t *
-                    (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 +
-                                    t * (3.0 * (p1 - p2) + p3 - p0)));
-}
-
-double sample_bicubic(const Raster& r, double x, double y) {
-    const double c = (x - r.origin_x) / r.px - 0.5;  // pixel-centre coordinates
-    const double rw = (y - r.origin_y) / r.py - 0.5;
-    const int c0 = static_cast<int>(std::floor(c));
-    const int r0 = static_cast<int>(std::floor(rw));
-    const double fx = c - c0;
-    const double fy = rw - r0;
-    const auto at = [&](int rr, int cc) {
-        rr = std::clamp(rr, 0, r.h - 1);
-        cc = std::clamp(cc, 0, r.w - 1);
-        return static_cast<double>(r.v[static_cast<size_t>(rr) * r.w + cc]);
-    };
-    double col[4];
-    for (int j = 0; j < 4; ++j)
-        col[j] = cubic(at(r0 - 1 + j, c0 - 1), at(r0 - 1 + j, c0), at(r0 - 1 + j, c0 + 1),
-                       at(r0 - 1 + j, c0 + 2), fx);
-    return cubic(col[0], col[1], col[2], col[3], fy);
-}
-
 double ring_area2(const std::vector<double>& r) {
     double a = 0.0;
     const int n = static_cast<int>(r.size() / 2);

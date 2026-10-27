@@ -3,6 +3,7 @@
 // minus the holes. Walls project to zero area in xy, so summing every building triangle
 // in plan view gives the roof area directly.
 #include <cmath>
+#include <exception>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -93,9 +94,34 @@ void run(const std::string& name, const std::vector<std::vector<double>>& rings,
           name + ": roof area " + fmt(got) + " = " + fmt(want) + " m2");
 }
 
+// Regression: bicubic clamped its stencil but never checked the sample point, so terrain
+// built against another tile's cached raster came out flat with no error. A point on the
+// raster's outer edge is still inside; one beyond it must throw.
+void test_bicubic_bounds() {
+    const Raster r = flat_terrain(100.0);  // covers x, y in [-50, 50]
+    bool edge_ok = true;
+    try {
+        sample_bicubic(r, -50.0, 50.0);
+        sample_bicubic(r, 50.0, -50.0);
+    } catch (const std::exception&) {
+        edge_ok = false;
+    }
+    check(edge_ok, "bicubic: samples on the raster's outer edge are accepted");
+    for (const double x : {-50.5, 50.5, 1000.0}) {
+        bool threw = false;
+        try {
+            sample_bicubic(r, x, 0.0);
+        } catch (const std::exception&) {
+            threw = true;
+        }
+        check(threw, "bicubic: sample at x " + fmt(x) + " outside the raster throws");
+    }
+}
+
 }  // namespace
 
 int main() {
+    test_bicubic_bounds();
     // Plain square: 20 x 20.
     run("square", {rect(-10, -10, 10, 10)}, 400.0);
 

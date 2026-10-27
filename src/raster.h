@@ -26,3 +26,6 @@ Raster load_raster(const std::string& path);
 // is a bug in the grid, not a condition to paper over.
 float sample_nearest(const Raster& r, double x, double y);
 float sample_bilinear(const Raster& r, double x, double y);
+// Catmull-Rom, for the terrain upsample (SPEC.md 6.5). Only the sample point is
+// bounds-checked; the 4x4 stencil clamps at the edge, as bilinear's 2x2 does.
+double sample_bicubic(const Raster& r, double x, double y);
