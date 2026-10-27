@@ -4,6 +4,7 @@
 
 #include <cpl_conv.h>
 #include <cpl_json.h>
+#include <cpl_string.h>
 #include <cpl_vsi.h>
 
 #include "sha256.h"
@@ -51,15 +52,66 @@ void cache_remote_file(const std::string& url, const std::string& out) {
     }
 }
 
-void write_request(const std::string& cache, const TileRequest& r) {
+namespace {
+
+const char* const TILE_KEYS[] = {"lat", "lon", "extent_m"};
+
+CPLJSONDocument request_doc(const TileRequest& r) {
     CPLJSONDocument doc;
     CPLJSONObject root = doc.GetRoot();
     root.Add("lat", r.lat);
     root.Add("lon", r.lon);
     root.Add("extent_m", r.extent_m);
     root.Add("seed", static_cast<GInt64>(r.seed));
-    if (!doc.Save(cache_path(cache, "request.json")))
+    return doc;
+}
+
+// Compared as recorded text, not as numbers: CPLJSON writes doubles to about 15
+// significant digits, so 46.88000000000001 reads back as 46.880000000000003 and an exact
+// numeric comparison would reject a cache against its own request. The text form is
+// stable through a save and load (measured), so equal text means the same recorded tile.
+void check_request(const std::string& cache, const TileRequest& r) {
+    const std::string path = cache_path(cache, "request.json");
+    CPLJSONDocument stored;
+    if (!stored.Load(path)) throw std::runtime_error("cache: cannot read " + path);
+    const CPLJSONDocument want = request_doc(r);
+    for (const char* key : TILE_KEYS) {
+        const CPLJSONObject s = stored.GetRoot().GetObj(key);
+        if (!s.IsValid()) throw std::runtime_error("cache: " + path + " has no " + key);
+        const std::string got = s.Format(CPLJSONObject::PrettyFormat::Plain);
+        const std::string asked =
+            want.GetRoot().GetObj(key).Format(CPLJSONObject::PrettyFormat::Plain);
+        if (got != asked)
+            throw std::runtime_error("cache: " + cache + " holds a different tile (" + key +
+                                     " " + got + " in request.json, " + asked +
+                                     " requested); use a separate cache directory per tile");
+    }
+}
+
+}  // namespace
+
+void claim_cache(const std::string& cache, const TileRequest& r) {
+    const std::string path = cache_path(cache, "request.json");
+    if (file_exists(path)) {
+        check_request(cache, r);
+        return;
+    }
+    // Without request.json nothing says which tile any file here belongs to.
+    const CPLStringList entries(VSIReadDir(cache.c_str()));
+    for (int i = 0; i < entries.size(); ++i) {
+        const std::string name = entries[i];
+        if (name != "." && name != "..")
+            throw std::runtime_error("cache: " + cache + " has no request.json but is not "
+                                     "empty (found " + name + "), so its tile is unknown");
+    }
+    if (!request_doc(r).Save(path))
         throw std::runtime_error("cache: cannot write request.json in " + cache);
+}
+
+void require_cache_matches(const std::string& cache, const TileRequest& r) {
+    if (!file_exists(cache_path(cache, "request.json")))
+        throw std::runtime_error("cache: " + cache + " has no request.json; run fetch first");
+    check_request(cache, r);
 }
 
 void write_provenance(const std::string& cache, const std::vector<Provenance>& entries) {

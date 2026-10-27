@@ -132,6 +132,7 @@ void cmd_generate(Flags& flags) {
     const Grid g = make_grid(r);
     print_grid(r, g);
     std::printf("cache      %s\nout        %s\n", cache.c_str(), out.c_str());
+    require_cache_matches(cache, r);
 
     // Create the output directory, exactly as `fetch` creates the cache. Without this
     // the two subcommands behave differently and the documented sequence fails on a

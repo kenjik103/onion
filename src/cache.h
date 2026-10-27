@@ -34,5 +34,15 @@ void cache_remote_file(const std::string& url, const std::string& out);
 // an interrupted run never leaves a file the next run would treat as cached.
 std::string partial_path(const std::string& final_path);
 
-void write_request(const std::string& cache, const TileRequest& r);
+// A cache holds one tile. request.json records which, and every cached file is reused on
+// existence alone, so these two guards are what stop one tile's data being served for
+// another. Only lat, lon and extent identify the tile: the seed does not change anything
+// `fetch` pulls (request.h).
+//
+// For `fetch`: a cache with request.json must match the request; one without must be
+// empty, and gets request.json written. Throws otherwise.
+void claim_cache(const std::string& cache, const TileRequest& r);
+// For `generate`: request.json must exist and match the request. Throws otherwise.
+void require_cache_matches(const std::string& cache, const TileRequest& r);
+
 void write_provenance(const std::string& cache, const std::vector<Provenance>& entries);

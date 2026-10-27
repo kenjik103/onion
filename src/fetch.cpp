@@ -111,7 +111,7 @@ Provenance fetch_overture_buildings(const std::string& cache, const Grid& g) {
 void run_fetch(const TileRequest& r, const std::string& cache) {
     const Grid g = make_grid(r);
     ensure_dir(cache);
-    write_request(cache, r);
+    claim_cache(cache, r);
 
     std::vector<Provenance> prov;
     prov.push_back(fetch_terrain(cache, g));

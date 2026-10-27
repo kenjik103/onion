@@ -2,10 +2,10 @@
 // WorldCover's tile naming and the temporary-path rule that GDAL's extension-based
 // driver selection forces on us.
 #include <cstdio>
+#include <cstdlib>
+#include <functional>
 #include <stdexcept>
 #include <string>
-
-#include <cstdio>
 
 #include "cache.h"
 #include "sources.h"
@@ -47,6 +47,67 @@ void test_ensure_dir() {
     std::remove(base.c_str());
 }
 
+void expect_throw(const std::function<void()>& f, const std::string& what) {
+    try {
+        f();
+    } catch (const std::exception&) {
+        check(true, "rejected: " + what);
+        return;
+    }
+    check(false, "rejected: " + what);
+}
+
+void expect_ok(const std::function<void()>& f, const std::string& what) {
+    try {
+        f();
+    } catch (const std::exception& e) {
+        check(false, what + " (" + e.what() + ")");
+        return;
+    }
+    check(true, what);
+}
+
+// Regression: a cache reused for another tile was treated as cached file by file, so
+// fetch recorded one tile's URLs against another's bytes and generate built flat terrain
+// with no error. request.json is now the cache's identity and both subcommands check it.
+void test_cache_identity() {
+    const std::string base = "/tmp/onion_cache_identity_test";
+    std::system(("rm -rf " + base).c_str());
+    ensure_dir(base);
+
+    const TileRequest fargo{46.88, -96.79, 1000.0, 1};
+    expect_throw([&] { require_cache_matches(base, fargo); },
+                 "generate against a cache with no request.json");
+    expect_ok([&] { claim_cache(base, fargo); }, "fetch claims an empty cache");
+    check(file_exists(cache_path(base, "request.json")), "claiming writes request.json");
+    expect_ok([&] { claim_cache(base, fargo); }, "fetch reuses its own cache");
+    expect_ok([&] { claim_cache(base, {46.88, -96.79, 1000.0, 99}); },
+              "a different seed is the same tile");
+    expect_ok([&] { require_cache_matches(base, fargo); }, "generate accepts a matching cache");
+
+    expect_throw([&] { claim_cache(base, {42.36, -71.06, 1000.0, 1}); },
+                 "fetch into another tile's cache");
+    expect_throw([&] { require_cache_matches(base, {46.88, -96.79, 500.0, 1}); },
+                 "generate with a different extent");
+    expect_throw([&] { require_cache_matches(base, {46.8801, -96.79, 1000.0, 1}); },
+                 "generate with a different latitude");
+
+    // More digits than CPLJSON keeps: must still match itself.
+    const TileRequest fine{46.88000000000001, -96.79, 1000.0, 1};
+    std::system(("rm -rf " + base + " && mkdir " + base).c_str());
+    claim_cache(base, fine);
+    expect_ok([&] { require_cache_matches(base, fine); },
+              "a request with 16 significant digits matches its own cache");
+
+    // Files with no request.json: their tile is unknown.
+    std::system(("rm -rf " + base + " && mkdir " + base + " && touch " + base +
+                 "/terrain.tif").c_str());
+    expect_throw([&] { claim_cache(base, fargo); },
+                 "fetch into a non-empty cache with no request.json");
+
+    std::system(("rm -rf " + base).c_str());
+}
+
 void test_partial_path() {
     eq(partial_path("/a/b/terrain.tif"), "/a/b/terrain.partial.tif", "raster temp name");
     eq(partial_path("/a/b/buildings.fgb"), "/a/b/buildings.partial.fgb", "vector temp name");
@@ -66,6 +127,7 @@ int main() {
     try {
         test_worldcover_names();
         test_ensure_dir();
+        test_cache_identity();
         test_partial_path();
     } catch (const std::exception& e) {
         std::fprintf(stderr, "error: %s\n", e.what());
