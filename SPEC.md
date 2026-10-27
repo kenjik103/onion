@@ -125,7 +125,7 @@ Crowns only for the MVP (stems are out of scope, section 3). Each crown is an en
 The MVP uses one archetype for every tree: a single PAD, nadir projection coefficient G, crown-base ratio, envelope shape, and voxel size.
 
 ### 6.7 Building builder
-Extrudes each footprint into a flat-roofed solid. The base sits at the minimum terrain elevation under the footprint. **One height rule (a constant) for every footprint.** Overture's optional height attribute is deliberately ignored, so the scene never mixes sourced and guessed heights. Class 6 (building), one object ID per building.
+Extrudes each footprint into a flat-roofed solid. The base sits at the **minimum** terrain elevation under the footprint and the roof at the height constant above the **maximum**, both sampled across the whole footprint on the 1 m terrain lattice rather than at its vertices. Measuring the roof from the minimum instead buries the building wherever the ground rises under it: on a Beacon Hill tile with 42.5 m of relief, 876 of 1307 buildings had terrain more than 1 m inside them and 129 were swallowed whole, contributing no roof points at all. The height constant therefore means "above the ground the building stands on", not "above its lowest corner". **One height rule (a constant) for every footprint.** Overture's optional height attribute is deliberately ignored, so the scene never mixes sourced and guessed heights. Class 6 (building), one object ID per building.
 
 ### 6.8 Scene geometry contract
 The files any scanner reads. **The user's proprietary simulator will be built against this, so it must be exact and documented.**

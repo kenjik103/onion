@@ -24,6 +24,22 @@ std::string fmt(double v) {
     return b;
 }
 
+// Terrain sloping along x, to check a building is not buried by ground rising under it.
+Raster sloped_terrain(double z0, double dz_per_m) {
+    Raster r;
+    r.w = 64; r.h = 64;
+    r.origin_x = -50.0; r.origin_y = 50.0;
+    r.px = 100.0 / 64.0; r.py = -100.0 / 64.0;
+    r.path = "<synthetic slope>";
+    r.v.resize(static_cast<size_t>(r.w) * r.h);
+    for (int j = 0; j < r.h; ++j)
+        for (int i = 0; i < r.w; ++i) {
+            const double x = r.origin_x + (i + 0.5) * r.px;
+            r.v[static_cast<size_t>(j) * r.w + i] = static_cast<float>(z0 + dz_per_m * x);
+        }
+    return r;
+}
+
 // A flat terrain raster covering the test area.
 Raster flat_terrain(double z) {
     Raster r;
@@ -97,6 +113,30 @@ int main() {
     run("L-shape with courtyard",
         {{-10, -10, 10, -10, 10, 0, 0, 0, 0, 10, -10, 10}, rect(-8, -8, -5, -5)},
         300.0 - 9.0);
+
+    // A 20 m footprint on a 20% slope spans 4 m of ground. With the roof measured from
+    // the lowest corner it would be swallowed; measured from the highest it cannot be.
+    {
+        Footprint f;
+        f.id = "on a slope";
+        f.height_m = 6.0;
+        f.rings = {rect(-10, -10, 10, 10)};
+        Mesh m;
+        std::vector<ObjectRow> objs;
+        const Raster terr = sloped_terrain(100.0, 0.20);
+        build_buildings({f}, terr, flat_grid(), 1, m, objs);
+        float zlo = 1e30f, zhi = -1e30f;
+        for (size_t i = 2; i < m.xyz.size(); i += 3) {
+            zlo = std::min(zlo, m.xyz[i]);
+            zhi = std::max(zhi, m.xyz[i]);
+        }
+        // Ground under the footprint runs 98 .. 102 m, so the roof must clear 102.
+        check(std::abs(zlo - 98.0) < 0.05,
+              "slope: base sits on the lowest ground (" + fmt(zlo) + " = 98)");
+        check(zhi >= 102.0 + 6.0 - 0.05,
+              "slope: roof clears the highest ground by the height constant (" +
+                  fmt(zhi) + " >= 108)");
+    }
 
     std::printf("\n%s\n", failures == 0 ? "all checks passed" : "FAILURES PRESENT");
     return failures == 0 ? 0 : 1;
